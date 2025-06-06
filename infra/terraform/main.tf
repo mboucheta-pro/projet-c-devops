@@ -13,7 +13,7 @@ locals {
 
 # SSH Key
 resource "aws_key_pair" "deployer" {
-  key_name   = "${var.project}-${var.environment}-key"
+  key_name   = "${var.project}-${var.environment}-key-${formatdate("YYYYMMDD-hhmmss", timestamp())}"
   public_key = var.ssh_public_key
 }
 
@@ -22,7 +22,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 3.0"
 
-  name = "${var.project}-vpc"
+  name = "${var.project}-vpc-${var.environment}"
   cidr = var.vpc_cidr
 
   azs             = ["${var.region}a", "${var.region}b"]
@@ -153,7 +153,7 @@ resource "aws_instance" "monitoring" {
 
 # Base de données RDS
 resource "aws_db_subnet_group" "default" {
-  name       = "${var.project}-db-subnet-group"
+  name       = "${var.project}-db-subnet-group-${var.environment}"
   subnet_ids = module.vpc.public_subnets  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
 
   tags = local.tags
@@ -194,7 +194,7 @@ resource "aws_db_instance" "database" {
   engine                 = "mysql"
   engine_version         = "8.0"
   instance_class         = "db.t3.small" # Économique pour dev/test
-  identifier             = "${var.project}-db"
+  identifier             = "${var.project}-db-${var.environment}"
   db_name                = "appdb"
   username               = var.db_username
   password               = var.db_password
@@ -212,7 +212,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 18.0"
 
-  cluster_name    = "${var.project}-cluster"
+  cluster_name    = "${var.project}-cluster-${var.environment}"
   cluster_version = "1.27"
   
   vpc_id     = module.vpc.vpc_id
@@ -221,6 +221,9 @@ module "eks" {
   # Économie de coûts avec un cluster minimal
   cluster_endpoint_private_access = true
   cluster_endpoint_public_access  = true
+  
+  # Désactiver la création du groupe de logs CloudWatch
+  create_cloudwatch_log_group = false
 
   # Node groups optimisés pour les coûts
   eks_managed_node_groups = {
