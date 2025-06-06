@@ -1,0 +1,215 @@
+---
+- name: Configuration du GitHub Runner
+  hosts: github_runner
+  become: yes
+  vars:
+    github_account: "VOTRE_COMPTE_GITHUB"
+    github_repo: "VOTRE_REPO"
+    runner_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') }}"
+  tasks:
+    - name: Installation des dépendances
+      package:
+        name:
+          - git
+          - curl
+          - jq
+          - docker
+        state: present
+
+    - name: Démarrage et activation de Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Création du répertoire pour le runner
+      file:
+        path: /opt/actions-runner
+        state: directory
+        mode: '0755'
+
+    - name: Téléchargement du runner
+      get_url:
+        url: https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+        dest: /tmp/actions-runner.tar.gz
+
+    - name: Extraction du runner
+      unarchive:
+        src: /tmp/actions-runner.tar.gz
+        dest: /opt/actions-runner
+        remote_src: yes
+
+    - name: Configuration du runner
+      shell: |
+        cd /opt/actions-runner
+        ./config.sh --url https://github.com/{{ github_account }}/{{ github_repo }} --token {{ runner_token }} --name "aws-runner" --work _work --unattended
+      args:
+        creates: /opt/actions-runner/.runner
+
+    - name: Installation du service
+      shell: |
+        cd /opt/actions-runner
+        ./svc.sh install
+      args:
+        creates: /etc/systemd/system/actions.runner.*.service
+
+    - name: Démarrage du service
+      systemd:
+        name: "actions.runner.{{ github_account }}-{{ github_repo }}.aws-runner.service"
+        state: started
+        enabled: yes
+
+- name: Configuration du serveur SonarQube
+  hosts: sonarqube
+  become: yes
+  tasks:
+    - name: Installation des dépendances
+      package:
+        name:
+          - java-17-amazon-corretto
+          - unzip
+          - wget
+        state: present
+
+    - name: Configuration système pour SonarQube
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      with_items:
+        - { key: 'vm.max_map_count', value: '262144' }
+        - { key: 'fs.file-max', value: '65536' }
+
+    - name: Création de l'utilisateur sonarqube
+      user:
+        name: sonarqube
+        system: yes
+        create_home: yes
+        home: /opt/sonarqube
+
+    - name: Téléchargement de SonarQube
+      get_url:
+        url: https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.1.69595.zip
+        dest: /tmp/sonarqube.zip
+
+    - name: Extraction de SonarQube
+      unarchive:
+        src: /tmp/sonarqube.zip
+        dest: /opt
+        remote_src: yes
+        creates: /opt/sonarqube-9.9.1.69595
+
+    - name: Création d'un lien symbolique
+      file:
+        src: /opt/sonarqube-9.9.1.69595
+        dest: /opt/sonarqube
+        state: link
+
+    - name: Configuration des permissions
+      file:
+        path: /opt/sonarqube
+        owner: sonarqube
+        group: sonarqube
+        recurse: yes
+
+    - name: Création du service SonarQube
+      copy:
+        dest: /etc/systemd/system/sonarqube.service
+        content: |
+          [Unit]
+          Description=SonarQube service
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=sonarqube
+          Group=sonarqube
+          ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+          ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+          Restart=on-failure
+          LimitNOFILE=65536
+          LimitNPROC=4096
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Démarrage du service SonarQube
+      systemd:
+        name: sonarqube
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+- name: Configuration du serveur de monitoring
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Installation des dépendances
+      package:
+        name:
+          - docker
+          - docker-compose
+        state: present
+
+    - name: Démarrage et activation de Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Création du répertoire pour Prometheus et Grafana
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - /opt/monitoring/prometheus
+        - /opt/monitoring/grafana
+        - /opt/monitoring/grafana/data
+        - /opt/monitoring/grafana/provisioning
+
+    - name: Copie de la configuration Prometheus
+      copy:
+        src: /Users/7408122G/GIT.LOCAL/projet-c/monitoring/prometheus/prometheus.yml
+        dest: /opt/monitoring/prometheus/prometheus.yml
+
+    - name: Création du docker-compose.yml
+      copy:
+        dest: /opt/monitoring/docker-compose.yml
+        content: |
+          version: '3'
+          services:
+            prometheus:
+              image: prom/prometheus:v2.45.0
+              volumes:
+                - ./prometheus:/etc/prometheus
+              command:
+                - '--config.file=/etc/prometheus/prometheus.yml'
+                - '--storage.tsdb.path=/prometheus'
+                - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+                - '--web.console.templates=/usr/share/prometheus/consoles'
+              ports:
+                - 9090:9090
+              restart: always
+
+            grafana:
+              image: grafana/grafana:10.0.3
+              volumes:
+                - ./grafana/data:/var/lib/grafana
+                - ./grafana/provisioning:/etc/grafana/provisioning
+              environment:
+                - GF_SECURITY_ADMIN_PASSWORD=admin
+                - GF_USERS_ALLOW_SIGN_UP=false
+              ports:
+                - 3000:3000
+              restart: always
+              depends_on:
+                - prometheus
+
+    - name: Démarrage des services de monitoring
+      shell: |
+        cd /opt/monitoring
+        docker-compose up -d
+      args:
+        creates: /opt/monitoring/.initialized
