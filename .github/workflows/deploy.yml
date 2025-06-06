@@ -28,5 +28,5 @@ jobs:
       - name: Deploy to ${{ env.ENV }}
         run: |
           echo "Déploiement vers l'environnement $ENV"
-          echo "Voici ma variable ENV_NAME : $ENV_NAME "
+          echo "Voici ma variable ENV_NAME : ${{ vars.ENV_NAME }}"
           # ici tu peux appeler ton script de déploiement ou une commande SSH
