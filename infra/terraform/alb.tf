@@ -4,7 +4,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.public.ids
+  subnets            = [aws_subnet.public[0].id, aws_subnet.public[1].id]
 
   enable_deletion_protection = false
 
@@ -18,7 +18,7 @@ resource "aws_lb_target_group" "frontend" {
   name     = "${var.project}-frontend-tg-${var.environment}"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = data.aws_vpc.existing.id
+  vpc_id   = aws_vpc.main.id
 
   health_check {
     enabled             = true
@@ -41,7 +41,7 @@ resource "aws_lb_target_group" "backend" {
   name     = "${var.project}-backend-tg-${var.environment}"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = data.aws_vpc.existing.id
+  vpc_id   = aws_vpc.main.id
 
   health_check {
     enabled             = true

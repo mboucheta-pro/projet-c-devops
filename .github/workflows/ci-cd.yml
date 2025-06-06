@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, staging ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, staging ]
   workflow_dispatch:
     inputs:
       environment:
@@ -84,6 +84,8 @@ jobs:
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
@@ -305,6 +307,9 @@ jobs:
             echo "ENV=production" >> $GITHUB_ENV
             echo "TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
+            echo "TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
             echo "TAG=staging-${{ github.sha }}" >> $GITHUB_ENV
           else
@@ -384,6 +389,8 @@ jobs:
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
@@ -472,7 +479,7 @@ jobs:
           
           ## Environnement déployé
           
-          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then echo "staging"; else echo "development"; fi)
+          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then echo "development"; elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then echo "staging"; else echo "development"; fi)
           
           ## Date de déploiement
           

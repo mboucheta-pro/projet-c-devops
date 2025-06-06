@@ -17,43 +17,14 @@ resource "aws_key_pair" "deployer" {
   public_key = var.ssh_public_key
 }
 
-# VPC et réseau
-# Utilisation d'un VPC existant au lieu d'en créer un nouveau
-data "aws_vpc" "existing" {
-  filter {
-    name   = "tag:Name"
-    values = ["${var.project}-vpc*"]
-  }
-}
-
-data "aws_subnets" "public" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.existing.id]
-  }
-  filter {
-    name   = "tag:Name"
-    values = ["*public*"]
-  }
-}
-
-data "aws_subnets" "private" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.existing.id]
-  }
-  filter {
-    name   = "tag:Name"
-    values = ["*private*"]
-  }
-}
+# Les ressources VPC sont maintenant dans vpc.tf
 
 # Groupe de sécurité pour les instances EC2
 # Groupe de sécurité pour le bastion
 resource "aws_security_group" "bastion" {
   name        = "${var.project}-bastion-sg-${var.environment}"
   description = "Security group for bastion host"
-  vpc_id      = data.aws_vpc.existing.id
+  vpc_id      = aws_vpc.main.id
 
   # Autoriser SSH uniquement depuis Internet
   ingress {
@@ -79,7 +50,7 @@ resource "aws_security_group" "bastion" {
 resource "aws_security_group" "instances" {
   name        = "${var.project}-instances-sg-${var.environment}"
   description = "Security group for EC2 instances"
-  vpc_id      = data.aws_vpc.existing.id
+  vpc_id      = aws_vpc.main.id
 
   # SSH uniquement depuis le bastion
   ingress {
@@ -109,21 +80,21 @@ resource "aws_security_group" "instances" {
     from_port   = 9000
     to_port     = 9000
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.existing.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   ingress {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.existing.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.existing.cidr_block]
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   egress {
@@ -140,7 +111,7 @@ resource "aws_security_group" "instances" {
 resource "aws_instance" "github_runner" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small" # Bon équilibre coût/performance
-  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
+  subnet_id     = aws_subnet.public[0].id
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -158,7 +129,7 @@ resource "aws_instance" "github_runner" {
 resource "aws_instance" "sonarqube" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
-  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
+  subnet_id     = aws_subnet.public[0].id
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -176,7 +147,7 @@ resource "aws_instance" "sonarqube" {
 resource "aws_instance" "monitoring" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small"
-  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
+  subnet_id     = aws_subnet.public[0].id
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -193,7 +164,7 @@ resource "aws_instance" "monitoring" {
 # Base de données RDS
 resource "aws_db_subnet_group" "default" {
   name       = "${var.project}-db-subnet-group-${var.environment}"
-  subnet_ids = data.aws_subnets.public.ids  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
+  subnet_ids = [aws_subnet.public[0].id, aws_subnet.public[1].id]  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
 
   tags = local.tags
 }
@@ -201,7 +172,7 @@ resource "aws_db_subnet_group" "default" {
 resource "aws_security_group" "db" {
   name        = "${var.project}-db-sg-${var.environment}"
   description = "Security group for database"
-  vpc_id      = data.aws_vpc.existing.id
+  vpc_id      = aws_vpc.main.id
 
   # Accès MySQL depuis les instances d'application
   ingress {
@@ -257,7 +228,7 @@ module "eks" {
   cluster_version = "1.27"
   
   vpc_id     = data.aws_vpc.existing.id
-  subnet_ids = data.aws_subnets.private.ids
+  subnet_ids = [aws_subnet.private[0].id, aws_subnet.private[1].id]
 
   # Économie de coûts avec un cluster minimal
   cluster_endpoint_private_access = true
