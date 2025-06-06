@@ -18,40 +18,82 @@ resource "aws_key_pair" "deployer" {
 }
 
 # VPC et réseau
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 3.0"
+# Utilisation d'un VPC existant au lieu d'en créer un nouveau
+data "aws_vpc" "existing" {
+  filter {
+    name   = "tag:Name"
+    values = ["${var.project}-vpc*"]
+  }
+}
 
-  name = "${var.project}-vpc-${var.environment}"
-  cidr = var.vpc_cidr
+data "aws_subnet_ids" "public" {
+  vpc_id = data.aws_vpc.existing.id
+  filter {
+    name   = "tag:Name"
+    values = ["*public*"]
+  }
+}
 
-  azs             = ["${var.region}a", "${var.region}b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+data "aws_subnet_ids" "private" {
+  vpc_id = data.aws_vpc.existing.id
+  filter {
+    name   = "tag:Name"
+    values = ["*private*"]
+  }
+}
 
-  enable_nat_gateway = true
-  single_nat_gateway = true # Économie de coûts
-  
-  # Activation des paramètres DNS requis pour RDS public
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+data "aws_subnet" "public" {
+  for_each = data.aws_subnet_ids.public.ids
+  id       = each.value
+}
 
-  tags = local.tags
+data "aws_subnet" "private" {
+  for_each = data.aws_subnet_ids.private.ids
+  id       = each.value
 }
 
 # Groupe de sécurité pour les instances EC2
-resource "aws_security_group" "instances" {
-  name        = "${var.project}-instances-sg"
-  description = "Security group for EC2 instances"
-  vpc_id      = module.vpc.vpc_id
+# Groupe de sécurité pour le bastion
+resource "aws_security_group" "bastion" {
+  name        = "${var.project}-bastion-sg-${var.environment}"
+  description = "Security group for bastion host"
+  vpc_id      = data.aws_vpc.existing.id
 
+  # Autoriser SSH uniquement depuis Internet
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # À restreindre en production
+    cidr_blocks = ["0.0.0.0/0"] # Idéalement, restreindre à votre IP
   }
 
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.tags, {
+    Name = "${var.project}-bastion-sg-${var.environment}"
+  })
+}
+
+# Groupe de sécurité pour les instances EC2
+resource "aws_security_group" "instances" {
+  name        = "${var.project}-instances-sg-${var.environment}"
+  description = "Security group for EC2 instances"
+  vpc_id      = data.aws_vpc.existing.id
+
+  # SSH uniquement depuis le bastion
+  ingress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
+  }
+
+  # HTTP et HTTPS pour l'application
   ingress {
     from_port   = 80
     to_port     = 80
@@ -66,25 +108,26 @@ resource "aws_security_group" "instances" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Ports internes accessibles uniquement depuis le VPC
   ingress {
     from_port   = 9000
     to_port     = 9000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 
   ingress {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.existing.cidr_block]
   }
 
   egress {
@@ -101,7 +144,7 @@ resource "aws_security_group" "instances" {
 resource "aws_instance" "github_runner" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small" # Bon équilibre coût/performance
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -119,7 +162,7 @@ resource "aws_instance" "github_runner" {
 resource "aws_instance" "sonarqube" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -137,7 +180,7 @@ resource "aws_instance" "sonarqube" {
 resource "aws_instance" "monitoring" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small"
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -154,16 +197,17 @@ resource "aws_instance" "monitoring" {
 # Base de données RDS
 resource "aws_db_subnet_group" "default" {
   name       = "${var.project}-db-subnet-group-${var.environment}"
-  subnet_ids = module.vpc.public_subnets  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
+  subnet_ids = data.aws_subnet_ids.public.ids  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
 
   tags = local.tags
 }
 
 resource "aws_security_group" "db" {
-  name        = "${var.project}-db-sg"
+  name        = "${var.project}-db-sg-${var.environment}"
   description = "Security group for database"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.aws_vpc.existing.id
 
+  # Accès MySQL depuis les instances d'application
   ingress {
     from_port       = 3306
     to_port         = 3306
@@ -171,11 +215,12 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.instances.id]
   }
 
+  # Accès MySQL depuis le bastion uniquement
   ingress {
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Pour permettre l'initialisation depuis le pipeline
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
   }
 
   egress {
@@ -189,11 +234,11 @@ resource "aws_security_group" "db" {
 }
 
 resource "aws_db_instance" "database" {
-  allocated_storage      = 20
+  allocated_storage      = 10  # Réduit à 10 pour économiser des ressources
   storage_type           = "gp3"
   engine                 = "mysql"
   engine_version         = "8.0"
-  instance_class         = "db.t3.small" # Économique pour dev/test
+  instance_class         = "db.t3.micro" # Réduit à micro pour économiser des ressources
   identifier             = "${var.project}-db-${var.environment}"
   db_name                = "appdb"
   username               = var.db_username
@@ -202,7 +247,7 @@ resource "aws_db_instance" "database" {
   vpc_security_group_ids = [aws_security_group.db.id]
   skip_final_snapshot    = true
   multi_az               = false # Économie de coûts en dev
-  publicly_accessible    = true  # Pour faciliter l'initialisation depuis le pipeline
+  publicly_accessible    = false # Accès uniquement via le bastion et les instances
 
   tags = local.tags
 }
@@ -215,8 +260,8 @@ module "eks" {
   cluster_name    = "${var.project}-cluster-${var.environment}"
   cluster_version = "1.27"
   
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets
+  vpc_id     = data.aws_vpc.existing.id
+  subnet_ids = data.aws_subnet_ids.private.ids
 
   # Économie de coûts avec un cluster minimal
   cluster_endpoint_private_access = true
@@ -228,11 +273,11 @@ module "eks" {
   # Node groups optimisés pour les coûts
   eks_managed_node_groups = {
     main = {
-      desired_size = 2
+      desired_size = 1  # Réduit à 1 pour économiser des ressources
       min_size     = 1
-      max_size     = 3
+      max_size     = 2  # Réduit à 2 pour économiser des ressources
 
-      instance_types = ["t3a.medium"]
+      instance_types = ["t3a.small"]  # Réduit à small pour économiser des ressources
       capacity_type  = "SPOT" # Utilisation des instances Spot pour réduire les coûts
     }
   }

@@ -37,11 +37,9 @@ jobs:
           echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
 
-      - name: Debug AWS Credentials
+      - name: Debug AWS Region
         run: |
-          echo "AWS_ACCESS_KEY_ID=${{ env.AWS_ACCESS_KEY_ID }}"
-          echo "AWS_SECRET_ACCESS_KEY=${{ env.AWS_SECRET_ACCESS_KEY }}"
-          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}"          
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}"
 
       - name: Generate SSH key pair
         run: |
@@ -397,11 +395,17 @@ jobs:
           ECR_ACCOUNT_URL=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY_FRONTEND }} --query 'repositories[0].repositoryUri' --output text | sed 's|/.*||')
           echo "ECR_ACCOUNT_URL=$ECR_ACCOUNT_URL" >> $GITHUB_ENV
       
-      - name: Initialize database
+      - name: Initialize database via bastion
         run: |
           DB_ENDPOINT=$(jq -r '.db_endpoint.value' terraform-outputs.json)
           DB_PASSWORD=$(cat ./credentials/db_password.txt)
-          mysql -h ${DB_ENDPOINT%:*} -u dbadmin -p$DB_PASSWORD < database/init.sql
+          BASTION_IP=$(jq -r '.bastion_ip.value' terraform-outputs.json)
+          
+          # Copier le script SQL sur le bastion
+          scp -o StrictHostKeyChecking=no -i ./credentials/id_rsa database/init.sql ec2-user@$BASTION_IP:/tmp/init.sql
+          
+          # Exécuter le script SQL depuis le bastion
+          ssh -o StrictHostKeyChecking=no -i ./credentials/id_rsa ec2-user@$BASTION_IP "mysql -h ${DB_ENDPOINT%:*} -u dbadmin -p$DB_PASSWORD < /tmp/init.sql && rm /tmp/init.sql"
       
       - name: Deploy to EKS
         run: |
