@@ -2,7 +2,7 @@
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb-sg-${var.environment}"
   description = "Security group for ALB"
-  vpc_id      = data.aws_vpc.existing.id
+  vpc_id      = module.vpc.vpc_id
 
   # Autoriser HTTP et HTTPS depuis Internet
   ingress {
