@@ -1,16 +1,40 @@
-# Application Load Balancer (ALB)
+# Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project}-alb-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public[0].id, aws_subnet.public[1].id]
+  subnets            = module.vpc.public_subnets
 
   enable_deletion_protection = false
 
   tags = merge(local.tags, {
     Name = "${var.project}-alb-${var.environment}"
   })
+
+  depends_on = [aws_security_group.alb]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Listener HTTP qui redirige vers HTTPS
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "OK"
+      status_code  = "200"
+    }
+  }
+
+  tags = local.tags
 }
 
 # Target group pour le frontend
@@ -18,7 +42,7 @@ resource "aws_lb_target_group" "frontend" {
   name     = "${var.project}-frontend-tg-${var.environment}"
   port     = 80
   protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  vpc_id   = module.vpc.vpc_id
 
   health_check {
     enabled             = true
@@ -31,22 +55,24 @@ resource "aws_lb_target_group" "frontend" {
     matcher             = "200"
   }
 
-  tags = merge(local.tags, {
-    Name = "${var.project}-frontend-tg-${var.environment}"
-  })
+  tags = local.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Target group pour le backend
 resource "aws_lb_target_group" "backend" {
   name     = "${var.project}-backend-tg-${var.environment}"
-  port     = 80
+  port     = 3000
   protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  vpc_id   = module.vpc.vpc_id
 
   health_check {
     enabled             = true
     interval            = 30
-    path                = "/api/health"
+    path                = "/"
     port                = "traffic-port"
     healthy_threshold   = 3
     unhealthy_threshold = 3
@@ -54,46 +80,36 @@ resource "aws_lb_target_group" "backend" {
     matcher             = "200"
   }
 
-  tags = merge(local.tags, {
-    Name = "${var.project}-backend-tg-${var.environment}"
-  })
-}
+  tags = local.tags
 
-# Listener HTTP qui redirige vers HTTPS
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-# Listener HTTPS
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = aws_acm_certificate.cert.arn
+# Règle pour le frontend
+resource "aws_lb_listener_rule" "frontend" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
 
-  default_action {
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.frontend.arn
   }
+
+  condition {
+    path_pattern {
+      values = ["/"]
+    }
+  }
+
+  tags = local.tags
 }
 
-# Règle pour router les requêtes API vers le backend
-resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 100
+# Règle pour le backend
+resource "aws_lb_listener_rule" "backend" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 90
 
   action {
     type             = "forward"
@@ -105,35 +121,6 @@ resource "aws_lb_listener_rule" "api" {
       values = ["/api/*"]
     }
   }
-}
 
-# Certificat auto-signé pour le développement
-resource "tls_private_key" "cert" {
-  algorithm = "RSA"
-}
-
-resource "tls_self_signed_cert" "cert" {
-  private_key_pem = tls_private_key.cert.private_key_pem
-
-  subject {
-    common_name  = "${var.project}.example.com"
-    organization = "Example, Inc"
-  }
-
-  validity_period_hours = 8760 # 1 an
-
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-  ]
-}
-
-resource "aws_acm_certificate" "cert" {
-  private_key      = tls_private_key.cert.private_key_pem
-  certificate_body = tls_self_signed_cert.cert.cert_pem
-
-  tags = merge(local.tags, {
-    Name = "${var.project}-cert-${var.environment}"
-  })
+  tags = local.tags
 }

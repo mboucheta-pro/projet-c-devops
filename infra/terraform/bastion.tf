@@ -24,6 +24,10 @@ resource "aws_instance" "bastion" {
   tags = merge(local.tags, {
     Name = "${var.project}-bastion-${var.environment}"
   })
+
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }
 
 # Elastic IP pour le bastion (pour avoir une IP fixe)
@@ -33,4 +37,8 @@ resource "aws_eip" "bastion" {
   tags = merge(local.tags, {
     Name = "${var.project}-bastion-eip-${var.environment}"
   })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

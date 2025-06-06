@@ -134,6 +134,15 @@ jobs:
       - name: Terraform Validate
         working-directory: ./infra/terraform
         run: terraform validate
+        
+      - name: Manage Terraform state
+        working-directory: ./infra/terraform
+        run: |
+          # Nettoyer l'état des ressources qui n'existent plus
+          ./state_cleanup.sh
+          
+          # Importer les ressources existantes
+          ./import.sh ${{ env.ENV }}
       
       - name: Determine environment
         id: determine-env

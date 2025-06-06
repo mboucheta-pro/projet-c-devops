@@ -29,6 +29,10 @@ resource "aws_security_group" "alb" {
   tags = merge(local.tags, {
     Name = "${var.project}-alb-sg-${var.environment}"
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Mise à jour du groupe de sécurité des instances pour n'autoriser que l'ALB

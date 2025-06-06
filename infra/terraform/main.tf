@@ -15,6 +15,10 @@ locals {
 resource "aws_key_pair" "deployer" {
   key_name   = "${var.project}-${var.environment}-key"
   public_key = var.ssh_public_key
+
+  lifecycle {
+    ignore_changes = [public_key]
+  }
 }
 
 # VPC et réseau
@@ -91,6 +95,10 @@ resource "aws_security_group" "instances" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # GitHub Runner
@@ -109,6 +117,10 @@ resource "aws_instance" "github_runner" {
   tags = merge(local.tags, {
     Name = "${var.project}-github-runner"
   })
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 # SonarQube Server
@@ -127,6 +139,10 @@ resource "aws_instance" "sonarqube" {
   tags = merge(local.tags, {
     Name = "${var.project}-sonarqube"
   })
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 # Monitoring Server (Prometheus + Grafana)
@@ -145,6 +161,10 @@ resource "aws_instance" "monitoring" {
   tags = merge(local.tags, {
     Name = "${var.project}-monitoring"
   })
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 # Base de données RDS
@@ -153,6 +173,11 @@ resource "aws_db_subnet_group" "default" {
   subnet_ids = module.vpc.private_subnets
 
   tags = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [subnet_ids]
+  }
 }
 
 resource "aws_security_group" "db" {
@@ -182,6 +207,10 @@ resource "aws_security_group" "db" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_db_instance" "database" {
@@ -201,6 +230,11 @@ resource "aws_db_instance" "database" {
   publicly_accessible    = true  # Pour faciliter l'initialisation depuis le pipeline
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [password]
+    prevent_destroy = true
+  }
 }
 
 # Cluster EKS
@@ -231,4 +265,11 @@ module "eks" {
   }
 
   tags = local.tags
+
+  # Ignorer les changements dans les groupes de nœuds pour éviter les recréations inutiles
+  cluster_timeouts = {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
 }

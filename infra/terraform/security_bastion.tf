@@ -23,4 +23,8 @@ resource "aws_security_group" "bastion" {
   tags = merge(local.tags, {
     Name = "${var.project}-bastion-sg-${var.environment}"
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
