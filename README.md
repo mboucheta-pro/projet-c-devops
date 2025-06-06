@@ -83,6 +83,18 @@ Pour déclencher un déploiement complet :
 4. Sélectionnez la branche et l'environnement souhaités
 5. Cliquez sur "Run workflow"
 
+### Nettoyage des ressources
+
+Si vous avez besoin de supprimer toutes les ressources AWS créées par le projet :
+
+1. Accédez à l'onglet "Actions" du dépôt GitHub
+2. Sélectionnez le workflow "AWS Resources Cleanup"
+3. Cliquez sur "Run workflow"
+4. Tapez "SUPPRIMER" dans le champ de confirmation
+5. Cliquez sur "Run workflow"
+
+Pour plus de détails, consultez la [documentation de nettoyage](./docs/cleanup.md).
+
 ### Récupération des informations de déploiement
 
 Après l'exécution du pipeline, vous pouvez télécharger les artifacts suivants :
@@ -105,6 +117,7 @@ projet-c/
 ├── frontend/             # Interface utilisateur
 ├── infra/                # Infrastructure as Code
 │   ├── ansible/          # Configuration des serveurs
+│   ├── scripts/          # Scripts utilitaires
 │   └── terraform/        # Définition de l'infrastructure
 ├── kubernetes/           # Manifestes Kubernetes
 │   └── environments/     # Configurations par environnement

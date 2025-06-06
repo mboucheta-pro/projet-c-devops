@@ -1,0 +1,33 @@
+name: AWS Resources Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Tapez "SUPPRIMER" pour confirmer la suppression de toutes les ressources'
+        required: true
+        type: string
+
+jobs:
+  cleanup:
+    if: ${{ github.event.inputs.confirm == 'SUPPRIMER' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Decode AWS credentials
+        run: |
+          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          rm aws-credentials.json
+      
+      - name: Configure AWS CLI
+        run: |
+          aws configure set region ca-central-1
+          aws configure set output json
+      
+      - name: Run cleanup script
+        run: |
+          chmod +x ./infra/scripts/cleanup.sh
+          ./infra/scripts/cleanup.sh
