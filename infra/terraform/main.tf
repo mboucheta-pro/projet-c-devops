@@ -31,6 +31,10 @@ module "vpc" {
 
   enable_nat_gateway = true
   single_nat_gateway = true # Économie de coûts
+  
+  # Activation des paramètres DNS requis pour RDS public
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
   tags = local.tags
 }
@@ -150,7 +154,7 @@ resource "aws_instance" "monitoring" {
 # Base de données RDS
 resource "aws_db_subnet_group" "default" {
   name       = "${var.project}-db-subnet-group"
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = module.vpc.public_subnets  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
 
   tags = local.tags
 }
