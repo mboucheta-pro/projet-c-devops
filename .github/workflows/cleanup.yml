@@ -7,6 +7,11 @@ on:
         description: 'Tapez "SUPPRIMER" pour confirmer la suppression de toutes les ressources'
         required: true
         type: string
+      region:
+        description: 'Région AWS à nettoyer'
+        required: true
+        default: 'ca-central-1'
+        type: string
 
 jobs:
   cleanup:
@@ -24,8 +29,12 @@ jobs:
       
       - name: Configure AWS CLI
         run: |
-          aws configure set region ca-central-1
+          aws configure set region ${{ github.event.inputs.region }}
           aws configure set output json
+      
+      - name: Update cleanup script with selected region
+        run: |
+          sed -i "s/export AWS_REGION=ca-central-1/export AWS_REGION=${{ github.event.inputs.region }}/" ./infra/scripts/cleanup.sh
       
       - name: Run cleanup script
         run: |
