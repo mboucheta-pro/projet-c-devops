@@ -37,7 +37,13 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
-      
+
+      - name: Debug AWS Credentials
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ env.AWS_ACCESS_KEY_ID }}"
+          echo "AWS_SECRET_ACCESS_KEY=${{ env.AWS_SECRET_ACCESS_KEY }}"
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}"          
+
       - name: Generate SSH key pair
         run: |
           ssh-keygen -t rsa -b 4096 -f id_rsa -N ""
