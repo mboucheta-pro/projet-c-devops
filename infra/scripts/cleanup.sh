@@ -39,15 +39,35 @@ if [ "$CLEANUP_ALL" = true ] || [ "$CLEANUP_COMPUTE" = true ]; then
   echo "Nettoyage des clusters EKS..."
   for cluster in $(aws eks list-clusters --region $AWS_REGION --query 'clusters[]' --output text); do
     echo "Suppression du cluster EKS: $cluster"
-    for nodegroup in $(aws eks list-nodegroups --region $AWS_REGION --cluster-name $cluster --query 'nodegroups[]' --output text); do
-      echo "Suppression du nodegroup: $nodegroup du cluster: $cluster"
-      aws eks delete-nodegroup --region $AWS_REGION --cluster-name $cluster --nodegroup-name $nodegroup --no-paginate
-      echo "Attente de la suppression du nodegroup..."
-      aws eks wait nodegroup-deleted --region $AWS_REGION --cluster-name $cluster --nodegroup-name $nodegroup
+    # Supprimer les fargate profiles s'ils existent
+    for profile in $(aws eks list-fargate-profiles --region $AWS_REGION --cluster-name $cluster --query 'fargateProfileNames[]' --output text 2>/dev/null || echo ""); do
+      echo "Suppression du fargate profile: $profile du cluster: $cluster"
+      aws eks delete-fargate-profile --region $AWS_REGION --cluster-name $cluster --fargate-profile-name $profile || true
+      # Attendre la suppression du profil
+      while aws eks describe-fargate-profile --region $AWS_REGION --cluster-name $cluster --fargate-profile-name $profile &>/dev/null; do
+        echo "Attente de la suppression du fargate profile..."
+        sleep 10
+      done
     done
-    aws eks delete-cluster --region $AWS_REGION --name $cluster
+    
+    # Supprimer les nodegroups
+    for nodegroup in $(aws eks list-nodegroups --region $AWS_REGION --cluster-name $cluster --query 'nodegroups[]' --output text 2>/dev/null || echo ""); do
+      echo "Suppression du nodegroup: $nodegroup du cluster: $cluster"
+      aws eks delete-nodegroup --region $AWS_REGION --cluster-name $cluster --nodegroup-name $nodegroup --no-paginate || true
+      echo "Attente de la suppression du nodegroup..."
+      aws eks wait nodegroup-deleted --region $AWS_REGION --cluster-name $cluster --nodegroup-name $nodegroup || true
+    done
+    
+    # Supprimer les addons
+    for addon in $(aws eks list-addons --region $AWS_REGION --cluster-name $cluster --query 'addons[]' --output text 2>/dev/null || echo ""); do
+      echo "Suppression de l'addon: $addon du cluster: $cluster"
+      aws eks delete-addon --region $AWS_REGION --cluster-name $cluster --addon-name $addon --force || true
+    done
+    
+    # Supprimer le cluster
+    aws eks delete-cluster --region $AWS_REGION --name $cluster || true
     echo "Attente de la suppression du cluster..."
-    aws eks wait cluster-deleted --region $AWS_REGION --name $cluster
+    aws eks wait cluster-deleted --region $AWS_REGION --name $cluster || true
   done
 fi
 
@@ -87,16 +107,19 @@ if [ "$CLEANUP_ALL" = true ] || [ "$CLEANUP_STORAGE" = true ]; then
   echo "Nettoyage des bases de données RDS..."
   for db in $(aws rds describe-db-instances --region $AWS_REGION --query 'DBInstances[].DBInstanceIdentifier' --output text); do
     echo "Suppression de la base de données RDS: $db"
-    aws rds delete-db-instance --region $AWS_REGION --db-instance-identifier $db --skip-final-snapshot --delete-automated-backups
+    # Désactiver la protection contre la suppression si elle est activée
+    aws rds modify-db-instance --region $AWS_REGION --db-instance-identifier $db --no-deletion-protection --apply-immediately || true
+    # Supprimer l'instance sans snapshot final et supprimer les sauvegardes automatiques
+    aws rds delete-db-instance --region $AWS_REGION --db-instance-identifier $db --skip-final-snapshot --delete-automated-backups || true
     echo "Attente de la suppression de la base de données..."
-    aws rds wait db-instance-deleted --region $AWS_REGION --db-instance-identifier $db
+    aws rds wait db-instance-deleted --region $AWS_REGION --db-instance-identifier $db || true
   done
 
   # Supprimer les groupes de sous-réseaux RDS
   echo "Nettoyage des groupes de sous-réseaux RDS..."
   for subnet_group in $(aws rds describe-db-subnet-groups --region $AWS_REGION --query 'DBSubnetGroups[].DBSubnetGroupName' --output text); do
     echo "Suppression du groupe de sous-réseaux RDS: $subnet_group"
-    aws rds delete-db-subnet-group --region $AWS_REGION --db-subnet-group-name $subnet_group
+    aws rds delete-db-subnet-group --region $AWS_REGION --db-subnet-group-name $subnet_group || true
   done
 fi
 
@@ -134,6 +157,25 @@ fi
 # Supprimer les groupes de sécurité (sauf le groupe par défaut)
 if [ "$CLEANUP_ALL" = true ] || [ "$CLEANUP_NETWORK" = true ]; then
   echo "Nettoyage des groupes de sécurité..."
+  # Supprimer d'abord les règles de sécurité entrantes et sortantes pour éviter les dépendances
+  for sg in $(aws ec2 describe-security-groups --region $AWS_REGION --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text); do
+    echo "Suppression des règles du groupe de sécurité: $sg"
+    # Supprimer les règles entrantes
+    INBOUND_RULES=$(aws ec2 describe-security-groups --region $AWS_REGION --group-id $sg --query 'SecurityGroups[0].IpPermissions' --output json)
+    if [ "$INBOUND_RULES" != "[]" ] && [ "$INBOUND_RULES" != "null" ]; then
+      aws ec2 revoke-security-group-ingress --region $AWS_REGION --group-id $sg --ip-permissions "$INBOUND_RULES" || true
+    fi
+    # Supprimer les règles sortantes
+    OUTBOUND_RULES=$(aws ec2 describe-security-groups --region $AWS_REGION --group-id $sg --query 'SecurityGroups[0].IpPermissionsEgress' --output json)
+    if [ "$OUTBOUND_RULES" != "[]" ] && [ "$OUTBOUND_RULES" != "null" ]; then
+      aws ec2 revoke-security-group-egress --region $AWS_REGION --group-id $sg --ip-permissions "$OUTBOUND_RULES" || true
+    fi
+  done
+  
+  # Attendre un peu pour que les modifications se propagent
+  sleep 10
+  
+  # Maintenant supprimer les groupes de sécurité
   for sg in $(aws ec2 describe-security-groups --region $AWS_REGION --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text); do
     echo "Suppression du groupe de sécurité: $sg"
     aws ec2 delete-security-group --region $AWS_REGION --group-id $sg || true
@@ -198,10 +240,26 @@ if [ "$CLEANUP_ALL" = true ] || [ "$CLEANUP_STORAGE" = true ]; then
     if [ "$region" = "None" ]; then region="us-east-1"; fi
     if [ "$region" = "$AWS_REGION" ]; then
       echo "Suppression du bucket S3: $bucket dans la région $AWS_REGION"
-      # Vider le bucket d'abord
-      aws s3 rm s3://$bucket --recursive
-      # Supprimer le bucket
-      aws s3api delete-bucket --bucket $bucket --region $AWS_REGION
+      # Désactiver la protection contre la suppression
+      aws s3api put-bucket-versioning --bucket $bucket --versioning-configuration Status=Suspended
+      # Supprimer tous les objets, y compris les versions et les marqueurs de suppression
+      aws s3api list-object-versions --bucket $bucket --output json --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' | grep -v "null" > /tmp/delete_keys.json
+      if [ -s /tmp/delete_keys.json ]; then
+        sed -i 's/"Objects": \[/"Objects": \[\n/' /tmp/delete_keys.json
+        sed -i 's/}]/}\n]/' /tmp/delete_keys.json
+        aws s3api delete-objects --bucket $bucket --delete file:///tmp/delete_keys.json || true
+      fi
+      # Supprimer les marqueurs de suppression
+      aws s3api list-object-versions --bucket $bucket --output json --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' | grep -v "null" > /tmp/delete_markers.json
+      if [ -s /tmp/delete_markers.json ]; then
+        sed -i 's/"Objects": \[/"Objects": \[\n/' /tmp/delete_markers.json
+        sed -i 's/}]/}\n]/' /tmp/delete_markers.json
+        aws s3api delete-objects --bucket $bucket --delete file:///tmp/delete_markers.json || true
+      fi
+      # Vider le bucket avec la méthode standard (pour les objets restants)
+      aws s3 rm s3://$bucket --recursive --force
+      # Supprimer le bucket avec force
+      aws s3api delete-bucket --bucket $bucket --region $AWS_REGION --force || true
     fi
   done
 fi

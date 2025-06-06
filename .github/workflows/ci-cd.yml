@@ -127,8 +127,8 @@ jobs:
         with:
           terraform_version: 1.0.0
       
-      - name: Determine environment
-        id: determine-env
+      - name: Set environment
+        id: set-env
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
@@ -136,7 +136,7 @@ jobs:
             echo "ENV=production" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             echo "ENV=development" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
@@ -152,23 +152,6 @@ jobs:
       - name: Terraform Validate
         working-directory: ./infra/terraform
         run: terraform validate
-        
-      # Aucune étape de gestion d'état n'est nécessaire ici
-      
-      - name: Determine environment
-        id: determine-env
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "ENV=production" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
-            echo "ENV=staging" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            echo "ENV=development" >> $GITHUB_ENV
-          else
-            echo "ENV=development" >> $GITHUB_ENV
-          fi
       
       - name: Terraform Plan
         working-directory: ./infra/terraform
@@ -358,8 +341,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
       
-      - name: Determine environment
-        id: determine-env
+      - name: Set environment and tags
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
@@ -370,7 +352,7 @@ jobs:
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
             echo "TAG=staging-${{ github.sha }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             echo "ENV=development" >> $GITHUB_ENV
             echo "TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
           else
@@ -428,14 +410,7 @@ jobs:
           name: credentials
           path: ./credentials
       
-      - name: Set EKS cluster name
-        run: echo "EKS_CLUSTER_NAME=$(jq -r '.eks_cluster_name.value' terraform-outputs.json)" >> $GITHUB_ENV
-      
-      - name: Update kube config
-        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-      
-      - name: Determine environment
-        id: determine-env
+      - name: Set environment
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
@@ -443,11 +418,16 @@ jobs:
             echo "ENV=production" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             echo "ENV=development" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
           fi
+          
+          echo "EKS_CLUSTER_NAME=$(jq -r '.eks_cluster_name.value' terraform-outputs.json)" >> $GITHUB_ENV
+      
+      - name: Update kube config
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
       
       - name: Get ECR account URL
         id: get-ecr-url
@@ -526,7 +506,7 @@ jobs:
           
           ## Environnement déployé
           
-          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then echo "staging"; elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then echo "development"; else echo "development"; fi)
+          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then echo "staging"; elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then echo "development"; else echo "development"; fi)
           
           ## Date de déploiement
           
