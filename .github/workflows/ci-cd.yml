@@ -18,7 +18,7 @@ on:
           - production
       confirm_production:
         description: 'Tapez "CONFIRMER" pour déployer en production'
-        required: ${{ github.event.inputs.environment == 'production' }}
+        required: false
         type: string
 
 env:
