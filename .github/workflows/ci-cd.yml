@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, staging ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, staging ]
   workflow_dispatch:
     inputs:
       environment:
@@ -16,6 +16,10 @@ on:
           - development
           - staging
           - production
+      confirm_production:
+        description: 'Tapez "CONFIRMER" pour déployer en production'
+        required: ${{ github.event.inputs.environment == 'production' }}
+        type: string
 
 env:
   AWS_REGION: ca-central-1
@@ -30,7 +34,7 @@ jobs:
   setup-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -95,7 +99,7 @@ jobs:
     needs: setup-backend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -138,8 +142,10 @@ jobs:
             echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
           fi
@@ -164,14 +170,14 @@ jobs:
           echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name)" >> $GITHUB_ENV
       
       - name: Upload Terraform Outputs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
           path: ./infra/terraform/terraform-outputs.json
           retention-days: 7
       
       - name: Upload SSH keys and DB password
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: credentials
           path: ./ssh-keys/
@@ -181,7 +187,7 @@ jobs:
     needs: infrastructure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -191,13 +197,13 @@ jobs:
           rm aws-credentials.json
       
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
           path: ./infra/ansible
       
       - name: Download SSH keys
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials
           path: ./ssh-keys
@@ -252,7 +258,7 @@ jobs:
           echo "${{ steps.get-runner-token.outputs.result }}" > ./ssh-keys/github_runner_token.txt
       
       - name: Upload updated credentials
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: credentials-updated
           path: ./ssh-keys/
@@ -267,7 +273,7 @@ jobs:
     needs: configure-servers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -293,7 +299,7 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Run Trivy vulnerability scanner for backend
         uses: aquasecurity/trivy-action@master
@@ -319,7 +325,7 @@ jobs:
     needs: security-scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -341,9 +347,12 @@ jobs:
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
             echo "TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
             echo "TAG=staging-${{ github.sha }}" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
+            echo "TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
             echo "TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
@@ -377,8 +386,9 @@ jobs:
   deploy:
     needs: [build-and-push, configure-servers]
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.environment != 'production' || github.event.inputs.confirm_production == 'CONFIRMER' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -388,12 +398,12 @@ jobs:
           rm aws-credentials.json
       
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
       
       - name: Download credentials
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials
           path: ./credentials
@@ -411,8 +421,10 @@ jobs:
             echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "ENV=staging" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "ENV=development" >> $GITHUB_ENV
           else
             echo "ENV=development" >> $GITHUB_ENV
           fi
@@ -461,12 +473,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
       
       - name: Download credentials
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials-updated
           path: ./credentials
@@ -494,7 +506,7 @@ jobs:
           
           ## Environnement déployé
           
-          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then echo "staging"; else echo "development"; fi)
+          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then echo "staging"; elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then echo "development"; else echo "development"; fi)
           
           ## Date de déploiement
           
@@ -502,7 +514,7 @@ jobs:
           EOF
       
       - name: Upload deployment report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deployment-report
           path: ./deployment-report.md
