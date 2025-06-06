@@ -18,17 +18,17 @@ on:
           - production
 
 env:
-  AWS_REGION: eu-west-3
+  AWS_REGION: ca-central-1
   ECR_REPOSITORY_FRONTEND: projet-c/frontend
   ECR_REPOSITORY_BACKEND: projet-c/backend
   EKS_CLUSTER_NAME: projet-c-cluster
-  TF_VAR_region: eu-west-3
+  TF_VAR_region: ca-central-1
 
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -97,14 +97,14 @@ jobs:
           echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name)" >> $GITHUB_ENV
       
       - name: Upload Terraform Outputs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
           path: ./infra/terraform/terraform-outputs.json
           retention-days: 7
       
       - name: Upload SSH keys and DB password
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: credentials
           path: ./ssh-keys/
@@ -114,7 +114,7 @@ jobs:
     needs: infrastructure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -124,13 +124,13 @@ jobs:
           rm aws-credentials.json
       
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
           path: ./infra/ansible
       
       - name: Download SSH keys
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials
           path: ./ssh-keys
@@ -185,7 +185,7 @@ jobs:
           echo "${{ steps.get-runner-token.outputs.result }}" > ./ssh-keys/github_runner_token.txt
       
       - name: Upload updated credentials
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: credentials-updated
           path: ./ssh-keys/
@@ -200,10 +200,10 @@ jobs:
     needs: configure-servers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           
@@ -226,7 +226,7 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Run Trivy vulnerability scanner for backend
         uses: aquasecurity/trivy-action@master
@@ -252,7 +252,7 @@ jobs:
     needs: security-scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -311,7 +311,7 @@ jobs:
     needs: [build-and-push, configure-servers]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Decode AWS credentials
         run: |
@@ -321,12 +321,12 @@ jobs:
           rm aws-credentials.json
       
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
       
       - name: Download credentials
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials
           path: ./credentials
@@ -394,12 +394,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Terraform Outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
       
       - name: Download credentials
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: credentials-updated
           path: ./credentials
@@ -435,7 +435,7 @@ jobs:
           EOF
       
       - name: Upload deployment report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deployment-report
           path: ./deployment-report.md

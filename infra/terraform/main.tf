@@ -95,7 +95,7 @@ resource "aws_security_group" "instances" {
 
 # GitHub Runner
 resource "aws_instance" "github_runner" {
-  ami           = "ami-0302f42a44bf53a45" # Amazon Linux 2023
+  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small" # Bon équilibre coût/performance
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
@@ -113,7 +113,7 @@ resource "aws_instance" "github_runner" {
 
 # SonarQube Server
 resource "aws_instance" "sonarqube" {
-  ami           = "ami-0302f42a44bf53a45" # Amazon Linux 2023
+  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
@@ -131,7 +131,7 @@ resource "aws_instance" "sonarqube" {
 
 # Monitoring Server (Prometheus + Grafana)
 resource "aws_instance" "monitoring" {
-  ami           = "ami-0302f42a44bf53a45" # Amazon Linux 2023
+  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small"
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
