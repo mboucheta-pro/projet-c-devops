@@ -35,6 +35,7 @@ jobs:
           echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
           echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
       
       - name: Generate SSH key pair
@@ -55,6 +56,14 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.0.0
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
       
       - name: Terraform Init
         working-directory: ./infra/terraform
@@ -121,7 +130,16 @@ jobs:
           echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
           echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
       
       - name: Download Terraform Outputs
         uses: actions/download-artifact@v4
@@ -259,11 +277,20 @@ jobs:
           echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
           echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
       
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
+          
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
       
       - name: Determine environment
         id: determine-env
@@ -318,7 +345,16 @@ jobs:
           echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
           echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
           rm aws-credentials.json
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: false
       
       - name: Download Terraform Outputs
         uses: actions/download-artifact@v4

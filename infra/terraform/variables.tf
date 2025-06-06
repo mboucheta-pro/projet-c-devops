@@ -13,7 +13,7 @@ variable "environment" {
 variable "region" {
   description = "Région AWS"
   type        = string
-  default     = "eu-west-3"
+  default     = "ca-central-1"
 }
 
 variable "vpc_cidr" {
