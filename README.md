@@ -49,29 +49,29 @@ Le déploiement complet de l'infrastructure et de l'application est entièrement
 
 ### Prérequis
 
-1. Configurer le secret GitHub suivant :
-   ```
-   AWS_CREDENTIALS_BASE64
-   ```
-   
-   Ce secret doit contenir un fichier JSON encodé en base64 avec vos credentials AWS :
-   ```json
-   {
-     "aws_access_key_id": "VOTRE_ACCESS_KEY",
-     "aws_secret_access_key": "VOTRE_SECRET_KEY"
-   }
-   ```
-   
-   Pour créer ce secret :
-   ```bash
-   # Créer le fichier JSON
-   echo '{"aws_access_key_id":"VOTRE_ACCESS_KEY","aws_secret_access_key":"VOTRE_SECRET_KEY"}' > aws-credentials.json
-   
-   # Encoder en base64
-   base64 -i aws-credentials.json
-   
-   # Copier la sortie et la coller dans le secret GitHub
-   ```
+Configurer le secret GitHub suivant :
+```
+AWS_CREDENTIALS_BASE64
+```
+
+Ce secret doit contenir un fichier JSON encodé en base64 avec vos credentials AWS :
+```json
+{
+  "aws_access_key_id": "VOTRE_ACCESS_KEY",
+  "aws_secret_access_key": "VOTRE_SECRET_KEY"
+}
+```
+
+Pour créer ce secret :
+```bash
+# Créer le fichier JSON
+echo '{"aws_access_key_id":"VOTRE_ACCESS_KEY","aws_secret_access_key":"VOTRE_SECRET_KEY"}' > aws-credentials.json
+
+# Encoder en base64
+base64 -i aws-credentials.json
+
+# Copier la sortie et la coller dans le secret GitHub
+```
 
 ### Lancement du déploiement
 
@@ -83,6 +83,8 @@ Pour déclencher un déploiement complet :
 4. Sélectionnez la branche et l'environnement souhaités
 5. Cliquez sur "Run workflow"
 
+Le pipeline créera automatiquement l'infrastructure backend Terraform (bucket S3 et table DynamoDB) avant de déployer l'infrastructure.
+
 ### Nettoyage des ressources
 
 Si vous avez besoin de supprimer toutes les ressources AWS créées par le projet :
@@ -91,7 +93,8 @@ Si vous avez besoin de supprimer toutes les ressources AWS créées par le proje
 2. Sélectionnez le workflow "AWS Resources Cleanup"
 3. Cliquez sur "Run workflow"
 4. Tapez "SUPPRIMER" dans le champ de confirmation
-5. Cliquez sur "Run workflow"
+5. Sélectionnez la région AWS à nettoyer
+6. Cliquez sur "Run workflow"
 
 Pour plus de détails, consultez la [documentation de nettoyage](./docs/cleanup.md).
 
