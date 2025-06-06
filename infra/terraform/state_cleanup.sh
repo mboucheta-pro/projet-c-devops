@@ -1,8 +1,13 @@
 #!/bin/bash
 # Script pour nettoyer l'état Terraform des ressources qui n'existent plus
 
-# Vérifier si des ressources sont en erreur dans l'état
-terraform state list | while read resource; do
+echo "Vérification des ressources dans l'état Terraform..."
+
+# Récupérer la liste des ressources dans l'état
+RESOURCES=$(terraform state list)
+
+# Vérifier chaque ressource
+for resource in $RESOURCES; do
   echo "Vérification de la ressource: $resource"
   terraform state show "$resource" &>/dev/null
   if [ $? -ne 0 ]; then
