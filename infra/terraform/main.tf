@@ -26,30 +26,26 @@ data "aws_vpc" "existing" {
   }
 }
 
-data "aws_subnet_ids" "public" {
-  vpc_id = data.aws_vpc.existing.id
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.existing.id]
+  }
   filter {
     name   = "tag:Name"
     values = ["*public*"]
   }
 }
 
-data "aws_subnet_ids" "private" {
-  vpc_id = data.aws_vpc.existing.id
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.existing.id]
+  }
   filter {
     name   = "tag:Name"
     values = ["*private*"]
   }
-}
-
-data "aws_subnet" "public" {
-  for_each = data.aws_subnet_ids.public.ids
-  id       = each.value
-}
-
-data "aws_subnet" "private" {
-  for_each = data.aws_subnet_ids.private.ids
-  id       = each.value
 }
 
 # Groupe de sécurité pour les instances EC2
@@ -144,7 +140,7 @@ resource "aws_security_group" "instances" {
 resource "aws_instance" "github_runner" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small" # Bon équilibre coût/performance
-  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
+  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -162,7 +158,7 @@ resource "aws_instance" "github_runner" {
 resource "aws_instance" "sonarqube" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
-  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
+  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -180,7 +176,7 @@ resource "aws_instance" "sonarqube" {
 resource "aws_instance" "monitoring" {
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023
   instance_type = "t3a.small"
-  subnet_id     = tolist(data.aws_subnet_ids.public.ids)[0]
+  subnet_id     = tolist(data.aws_subnets.public.ids)[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = aws_key_pair.deployer.key_name
   
@@ -197,7 +193,7 @@ resource "aws_instance" "monitoring" {
 # Base de données RDS
 resource "aws_db_subnet_group" "default" {
   name       = "${var.project}-db-subnet-group-${var.environment}"
-  subnet_ids = data.aws_subnet_ids.public.ids  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
+  subnet_ids = data.aws_subnets.public.ids  # Utilisation des sous-réseaux publics pour une instance RDS accessible publiquement
 
   tags = local.tags
 }
@@ -261,7 +257,7 @@ module "eks" {
   cluster_version = "1.27"
   
   vpc_id     = data.aws_vpc.existing.id
-  subnet_ids = data.aws_subnet_ids.private.ids
+  subnet_ids = data.aws_subnets.private.ids
 
   # Économie de coûts avec un cluster minimal
   cluster_endpoint_private_access = true
