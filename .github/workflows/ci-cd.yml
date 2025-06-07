@@ -165,50 +165,8 @@ jobs:
         working-directory: ./infra/terraform
         continue-on-error: true
         run: |
-          # Extraire les outputs Terraform dans des fichiers texte séparés
-          terraform output -raw github_runner_ip > github_runner_ip.txt || echo "" > github_runner_ip.txt
-          terraform output -raw sonarqube_ip > sonarqube_ip.txt || echo "" > sonarqube_ip.txt
-          terraform output -raw monitoring_ip > monitoring_ip.txt || echo "" > monitoring_ip.txt
-          terraform output -raw db_endpoint > db_endpoint.txt || echo "" > db_endpoint.txt
-          terraform output -raw eks_cluster_endpoint > eks_cluster_endpoint.txt || echo "" > eks_cluster_endpoint.txt
-          terraform output -raw eks_cluster_name > eks_cluster_name.txt || echo "projet-c-cluster" > eks_cluster_name.txt
-          terraform output -raw vpc_id > vpc_id.txt || echo "" > vpc_id.txt
-          terraform output -raw bastion_public_ip > bastion_public_ip.txt || echo "" > bastion_public_ip.txt
-          
-          # Créer un fichier texte pour les artifacts
-          echo "github_runner_ip: $(cat github_runner_ip.txt)" > terraform-outputs.txt
-          echo "sonarqube_ip: $(cat sonarqube_ip.txt)" >> terraform-outputs.txt
-          echo "monitoring_ip: $(cat monitoring_ip.txt)" >> terraform-outputs.txt
-          echo "db_endpoint: $(cat db_endpoint.txt)" >> terraform-outputs.txt
-          echo "eks_cluster_endpoint: $(cat eks_cluster_endpoint.txt)" >> terraform-outputs.txt
-          echo "eks_cluster_name: $(cat eks_cluster_name.txt)" >> terraform-outputs.txt
-          echo "vpc_id: $(cat vpc_id.txt)" >> terraform-outputs.txt
-          echo "bastion_public_ip: $(cat bastion_public_ip.txt)" >> terraform-outputs.txt
-          
-          # Définir les variables d'environnement
-          echo "GITHUB_RUNNER_IP=$(cat github_runner_ip.txt)" >> $GITHUB_ENV
-          echo "SONARQUBE_IP=$(cat sonarqube_ip.txt)" >> $GITHUB_ENV
-          echo "MONITORING_IP=$(cat monitoring_ip.txt)" >> $GITHUB_ENV
-          echo "DB_ENDPOINT=$(cat db_endpoint.txt)" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_ENDPOINT=$(cat eks_cluster_endpoint.txt)" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_NAME=$(cat eks_cluster_name.txt)" >> $GITHUB_ENV
-          echo "VPC_ID=$(cat vpc_id.txt)" >> $GITHUB_ENV
-          echo "BASTION_PUBLIC_IP=$(cat bastion_public_ip.txt)" >> $GITHUB_ENV
-          
-          # Créer un fichier JSON pour la compatibilité avec les étapes suivantes
-          cat > terraform-outputs.json << EOJ
-          {
-            "github_runner_ip": {"value": "$(cat github_runner_ip.txt)"},
-            "sonarqube_ip": {"value": "$(cat sonarqube_ip.txt)"},
-            "monitoring_ip": {"value": "$(cat monitoring_ip.txt)"},
-            "db_endpoint": {"value": "$(cat db_endpoint.txt)"},
-            "eks_cluster_endpoint": {"value": "$(cat eks_cluster_endpoint.txt)"},
-            "eks_cluster_name": {"value": "$(cat eks_cluster_name.txt)"},
-            "vpc_id": {"value": "$(cat vpc_id.txt)"},
-            "bastion_public_ip": {"value": "$(cat bastion_public_ip.txt)"}
-          }
-          EOJ
-      
+          # Extraire tous les outputs Terraform au format JSON dans un fichier
+          terraform output -json > terraform-outputs.json
       - name: Upload Terraform Outputs
         uses: actions/upload-artifact@v4
         with:
