@@ -166,7 +166,7 @@ jobs:
         continue-on-error: true
         run: |
           # Extraire tous les outputs Terraform au format JSON dans un fichier
-          terraform output -json > terraform-outputs.json
+          terraform output -json | grep -v "^::" | grep -v "^\[command\]" > terraform-outputs.json
       - name: Upload Terraform Outputs
         uses: actions/upload-artifact@v4
         with:
