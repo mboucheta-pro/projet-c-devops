@@ -117,13 +117,22 @@ resource "aws_instance" "github_runner" {
     volume_size = 20
     volume_type = "gp3"
   }
+  
+  # Script de démarrage pour configurer l'accès SSH
+  user_data = <<-EOF
+    #!/bin/bash
+    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+    systemctl restart sshd
+  EOF
 
   tags = merge(local.tags, {
     Name = "${var.project}-github-runner"
   })
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data]
   }
 }
 
@@ -139,13 +148,22 @@ resource "aws_instance" "sonarqube" {
     volume_size = 30
     volume_type = "gp3"
   }
+  
+  # Script de démarrage pour configurer l'accès SSH
+  user_data = <<-EOF
+    #!/bin/bash
+    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+    systemctl restart sshd
+  EOF
 
   tags = merge(local.tags, {
     Name = "${var.project}-sonarqube"
   })
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data]
   }
 }
 
@@ -161,13 +179,22 @@ resource "aws_instance" "monitoring" {
     volume_size = 20
     volume_type = "gp3"
   }
+  
+  # Script de démarrage pour configurer l'accès SSH
+  user_data = <<-EOF
+    #!/bin/bash
+    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+    systemctl restart sshd
+  EOF
 
   tags = merge(local.tags, {
     Name = "${var.project}-monitoring"
   })
 
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data]
   }
 }
 
