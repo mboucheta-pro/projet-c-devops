@@ -164,25 +164,40 @@ jobs:
       - name: Save Terraform Outputs
         working-directory: ./infra/terraform
         run: |
-          # Sauvegarder chaque output individuellement sans passer par un fichier JSON
-          echo "GITHUB_RUNNER_IP=$(terraform output -raw github_runner_ip 2>/dev/null || echo '')" >> $GITHUB_ENV
-          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip 2>/dev/null || echo '')" >> $GITHUB_ENV
-          echo "MONITORING_IP=$(terraform output -raw monitoring_ip 2>/dev/null || echo '')" >> $GITHUB_ENV
-          echo "DB_ENDPOINT=$(terraform output -raw db_endpoint 2>/dev/null || echo '')" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_ENDPOINT=$(terraform output -raw eks_cluster_endpoint 2>/dev/null || echo '')" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null || echo '')" >> $GITHUB_ENV
-          
-          # Créer un fichier JSON simplifié manuellement pour les artifacts
-          cat > terraform-outputs.json << EOF
+          # Créer un script shell séparé pour gérer les outputs Terraform
+          cat > extract_outputs.sh << 'EOF'
+          #!/bin/bash
+          # Extraire les outputs Terraform un par un
+          GITHUB_RUNNER_IP=$(terraform output -raw github_runner_ip 2>/dev/null || echo "")
+          SONARQUBE_IP=$(terraform output -raw sonarqube_ip 2>/dev/null || echo "")
+          MONITORING_IP=$(terraform output -raw monitoring_ip 2>/dev/null || echo "")
+          DB_ENDPOINT=$(terraform output -raw db_endpoint 2>/dev/null || echo "")
+          EKS_CLUSTER_ENDPOINT=$(terraform output -raw eks_cluster_endpoint 2>/dev/null || echo "")
+          EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "")
+
+          # Écrire les variables d'environnement
+          echo "GITHUB_RUNNER_IP=$GITHUB_RUNNER_IP" >> $GITHUB_ENV
+          echo "SONARQUBE_IP=$SONARQUBE_IP" >> $GITHUB_ENV
+          echo "MONITORING_IP=$MONITORING_IP" >> $GITHUB_ENV
+          echo "DB_ENDPOINT=$DB_ENDPOINT" >> $GITHUB_ENV
+          echo "EKS_CLUSTER_ENDPOINT=$EKS_CLUSTER_ENDPOINT" >> $GITHUB_ENV
+          echo "EKS_CLUSTER_NAME=$EKS_CLUSTER_NAME" >> $GITHUB_ENV
+
+          # Créer un fichier JSON simplifié
+          cat > terraform-outputs.json << EOJ
           {
-            "github_runner_ip": {"value": "$(terraform output -raw github_runner_ip 2>/dev/null || echo '')"},
-            "sonarqube_ip": {"value": "$(terraform output -raw sonarqube_ip 2>/dev/null || echo '')"},
-            "monitoring_ip": {"value": "$(terraform output -raw monitoring_ip 2>/dev/null || echo '')"},
-            "db_endpoint": {"value": "$(terraform output -raw db_endpoint 2>/dev/null || echo '')"},
-            "eks_cluster_endpoint": {"value": "$(terraform output -raw eks_cluster_endpoint 2>/dev/null || echo '')"},
-            "eks_cluster_name": {"value": "$(terraform output -raw eks_cluster_name 2>/dev/null || echo '')"}
+            "github_runner_ip": {"value": "$GITHUB_RUNNER_IP"},
+            "sonarqube_ip": {"value": "$SONARQUBE_IP"},
+            "monitoring_ip": {"value": "$MONITORING_IP"},
+            "db_endpoint": {"value": "$DB_ENDPOINT"},
+            "eks_cluster_endpoint": {"value": "$EKS_CLUSTER_ENDPOINT"},
+            "eks_cluster_name": {"value": "$EKS_CLUSTER_NAME"}
           }
+          EOJ
           EOF
+
+          chmod +x extract_outputs.sh
+          ./extract_outputs.sh
       
       - name: Upload Terraform Outputs
         uses: actions/upload-artifact@v4
