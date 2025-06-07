@@ -164,13 +164,18 @@ jobs:
       - name: Save Terraform Outputs
         working-directory: ./infra/terraform
         run: |
-          terraform output -json > terraform-outputs.json
-          echo "GITHUB_RUNNER_IP=$(terraform output -raw github_runner_ip)" >> $GITHUB_ENV
-          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip)" >> $GITHUB_ENV
-          echo "MONITORING_IP=$(terraform output -raw monitoring_ip)" >> $GITHUB_ENV
-          echo "DB_ENDPOINT=$(terraform output -raw db_endpoint)" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_ENDPOINT=$(terraform output -raw eks_cluster_endpoint)" >> $GITHUB_ENV
-          echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name)" >> $GITHUB_ENV
+          # Rediriger stderr vers /dev/null pour éviter les messages de debug
+          terraform output -json 2>/dev/null > terraform-outputs.json
+          # Vérifier que le fichier est un JSON valide
+          jq '.' terraform-outputs.json > terraform-outputs-clean.json
+          mv terraform-outputs-clean.json terraform-outputs.json
+          # Extraire les valeurs individuelles
+          echo "GITHUB_RUNNER_IP=$(terraform output -raw github_runner_ip 2>/dev/null)" >> $GITHUB_ENV
+          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip 2>/dev/null)" >> $GITHUB_ENV
+          echo "MONITORING_IP=$(terraform output -raw monitoring_ip 2>/dev/null)" >> $GITHUB_ENV
+          echo "DB_ENDPOINT=$(terraform output -raw db_endpoint 2>/dev/null)" >> $GITHUB_ENV
+          echo "EKS_CLUSTER_ENDPOINT=$(terraform output -raw eks_cluster_endpoint 2>/dev/null)" >> $GITHUB_ENV
+          echo "EKS_CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null)" >> $GITHUB_ENV
       
       - name: Upload Terraform Outputs
         uses: actions/upload-artifact@v4
