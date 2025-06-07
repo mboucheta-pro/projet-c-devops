@@ -35,6 +35,10 @@ module "vpc" {
 
   enable_nat_gateway = true
   single_nat_gateway = true # Économie de coûts
+  
+  # Activer la résolution DNS et les noms d'hôtes DNS pour RDS
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
   tags = local.tags
 }
