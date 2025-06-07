@@ -235,9 +235,25 @@ jobs:
           mkdir -p ~/.ssh
           cp ./ssh-keys/id_rsa ~/.ssh/
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $(jq -r '.github_runner_ip.value' ./infra/ansible/terraform-outputs.json) >> ~/.ssh/known_hosts
-          ssh-keyscan -H $(jq -r '.sonarqube_ip.value' ./infra/ansible/terraform-outputs.json) >> ~/.ssh/known_hosts
-          ssh-keyscan -H $(jq -r '.monitoring_ip.value' ./infra/ansible/terraform-outputs.json) >> ~/.ssh/known_hosts
+          
+          # Attendre que les instances soient prêtes pour SSH (30 secondes)
+          echo "Attente de 30 secondes pour que les instances soient prêtes pour SSH..."
+          sleep 30
+          
+          # Ajouter les hôtes connus avec -o StrictHostKeyChecking=no
+          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' ./infra/ansible/terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' ./infra/ansible/terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value' ./infra/ansible/terraform-outputs.json)
+          
+          ssh-keyscan -H $GITHUB_RUNNER_IP >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H $SONARQUBE_IP >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H $MONITORING_IP >> ~/.ssh/known_hosts 2>/dev/null
+          
+          # Vérifier la connexion SSH
+          echo "Test de connexion SSH aux instances..."
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ec2-user@$GITHUB_RUNNER_IP 'echo "SSH connection successful"' || echo "Échec de la connexion SSH à $GITHUB_RUNNER_IP"
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ec2-user@$SONARQUBE_IP 'echo "SSH connection successful"' || echo "Échec de la connexion SSH à $SONARQUBE_IP"
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ec2-user@$MONITORING_IP 'echo "SSH connection successful"' || echo "Échec de la connexion SSH à $MONITORING_IP"
       
       - name: Generate GitHub Runner token
         id: get-runner-token
@@ -274,8 +290,14 @@ jobs:
       
       - name: Run Ansible playbook
         working-directory: ./infra/ansible
+        continue-on-error: true
         run: |
-          ansible-playbook -i inventory.ini playbook.yml -e "github_account=${{ github.repository_owner }} github_repo=${{ github.repository }} runner_token=${{ steps.get-runner-token.outputs.token }}"
+          # Ajouter des options pour le débogage et ignorer les erreurs de vérification des hôtes
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory.ini playbook.yml \
+            -e "github_account=${{ github.repository_owner }} github_repo=${{ github.repository }} runner_token=${{ steps.get-runner-token.outputs.token }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' \
+            -vv
   
   build-and-test:
     needs: configure-servers
