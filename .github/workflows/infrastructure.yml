@@ -150,7 +150,7 @@ jobs:
         working-directory: ./infra/terraform
         run: |
           # Remplacer le placeholder env/ par l'environnement réel dans la clé du backend
-          sed -i "s|key=\"env/|key=\"$ENV/|g" backend.tf
+          sed -i "s|key=\"env/|key=\"${{ env.ENV}}/|g" backend.tf
           terraform init
       
       - name: Terraform Validate
@@ -159,7 +159,7 @@ jobs:
       
       - name: Terraform Plan
         working-directory: ./infra/terraform
-        run: terraform plan -var="environment=$ENV" -out=tfplan
+        run: terraform plan -var="environment=${{ env.ENV}}" -out=tfplan
       
       - name: Terraform Apply
         working-directory: ./infra/terraform
