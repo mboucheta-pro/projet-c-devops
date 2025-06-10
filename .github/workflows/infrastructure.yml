@@ -1,4 +1,4 @@
-name: création de l'infrastructure
+name: Création de l'infrastructure
 
 on:
   push:
