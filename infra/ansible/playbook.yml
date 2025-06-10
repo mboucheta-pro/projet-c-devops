@@ -1,8 +1,8 @@
 ---
 - name: Configuration du GitHub Runner
   hosts: github_runner
-  become: yes
-  gather_facts: no
+  become: true
+  gather_facts: false
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
@@ -15,21 +15,21 @@
           - git
           - docker
         state: present
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Démarrer et activer Docker
       systemd:
         name: docker
         state: started
-        enabled: yes
-      ignore_errors: yes
+        enabled: true
+      ignore_errors: true
       
     - name: Ajouter l'utilisateur ec2-user au groupe docker
       user:
         name: ec2-user
         groups: docker
-        append: yes
-      ignore_errors: yes
+        append: true
+      ignore_errors: true
       
     - name: Créer le répertoire pour le runner
       file:
@@ -38,47 +38,47 @@
         owner: ec2-user
         group: ec2-user
         mode: '0755'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Télécharger le runner GitHub
       get_url:
         url: https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
         dest: /home/ec2-user/actions-runner/actions-runner.tar.gz
         mode: '0644'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Extraire l'archive du runner
       unarchive:
         src: /home/ec2-user/actions-runner/actions-runner.tar.gz
         dest: /home/ec2-user/actions-runner
-        remote_src: yes
+        remote_src: true
         owner: ec2-user
         group: ec2-user
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Configurer le runner
       shell: |
         cd /home/ec2-user/actions-runner
         ./config.sh --url https://github.com/{{ github_repo }} --token {{ runner_token }} --name "EC2-Runner" --unattended
       become_user: ec2-user
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Installer le service du runner
       shell: |
         cd /home/ec2-user/actions-runner
         ./svc.sh install
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Démarrer le service du runner
       shell: |
         cd /home/ec2-user/actions-runner
         ./svc.sh start
-      ignore_errors: yes
+      ignore_errors: true
 
 - name: Configuration de SonarQube
   hosts: sonarqube
-  become: yes
-  gather_facts: no
+  become: true
+  gather_facts: false
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
@@ -92,31 +92,31 @@
           - unzip
           - wget
         state: present
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer l'utilisateur sonarqube
       user:
         name: sonarqube
         shell: /bin/bash
         home: /opt/sonarqube
-        create_home: yes
-      ignore_errors: yes
+        create_home: true
+      ignore_errors: true
       
     - name: Télécharger SonarQube
       get_url:
         url: https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.1.69595.zip
         dest: /tmp/sonarqube.zip
         mode: '0644'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Extraire SonarQube
       unarchive:
         src: /tmp/sonarqube.zip
         dest: /opt
-        remote_src: yes
+        remote_src: true
         owner: sonarqube
         group: sonarqube
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer un lien symbolique
       file:
@@ -125,7 +125,7 @@
         state: link
         owner: sonarqube
         group: sonarqube
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer le service SonarQube
       copy:
@@ -145,24 +145,24 @@
           
           [Install]
           WantedBy=multi-user.target
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Recharger systemd
       systemd:
-        daemon_reload: yes
-      ignore_errors: yes
+        daemon_reload: true
+      ignore_errors: true
       
     - name: Démarrer et activer SonarQube
       systemd:
         name: sonarqube
         state: started
-        enabled: yes
-      ignore_errors: yes
+        enabled: true
+      ignore_errors: true
 
 - name: Configuration du monitoring
   hosts: monitoring
-  become: yes
-  gather_facts: no
+  become: true
+  gather_facts: false
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
@@ -175,21 +175,21 @@
           - docker
           - docker-compose
         state: present
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Démarrer et activer Docker
       systemd:
         name: docker
         state: started
-        enabled: yes
-      ignore_errors: yes
+        enabled: true
+      ignore_errors: true
       
     - name: Ajouter l'utilisateur ec2-user au groupe docker
       user:
         name: ec2-user
         groups: docker
-        append: yes
-      ignore_errors: yes
+        append: true
+      ignore_errors: true
       
     - name: Créer le répertoire pour Prometheus et Grafana
       file:
@@ -198,7 +198,7 @@
         owner: ec2-user
         group: ec2-user
         mode: '0755'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer le fichier docker-compose.yml
       copy:
@@ -237,7 +237,7 @@
         owner: ec2-user
         group: ec2-user
         mode: '0644'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer le répertoire pour la configuration de Prometheus
       file:
@@ -246,7 +246,7 @@
         owner: ec2-user
         group: ec2-user
         mode: '0755'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Créer le fichier de configuration Prometheus
       copy:
@@ -262,11 +262,11 @@
         owner: ec2-user
         group: ec2-user
         mode: '0644'
-      ignore_errors: yes
+      ignore_errors: true
       
     - name: Démarrer les conteneurs
       shell: |
         cd /home/ec2-user/monitoring
         docker-compose up -d
       become_user: ec2-user
-      ignore_errors: yes
+      ignore_errors: true
