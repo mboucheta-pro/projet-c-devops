@@ -248,7 +248,36 @@ jobs:
           # Attendre que les instances soient prêtes pour SSH (60 secondes)
           echo "Attente de 60 secondes pour que les instances soient prêtes pour SSH..."
           sleep 60
-      
+
+      - name: Configure SSH on instances
+        working-directory: ./infra/ansible
+        run: |
+          # Extraire les adresses IP
+          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
+          
+          # Créer un script pour configurer SSH
+          cat > configure_ssh.sh << 'EOF'
+          #!/bin/bash
+          sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+          sudo mkdir -p ~/.ssh
+          echo "$1" > ~/.ssh/authorized_keys
+          sudo chmod 700 ~/.ssh
+          sudo chmod 600 ~/.ssh/authorized_keys
+          sudo chown -R ec2-user:ec2-user ~/.ssh
+          sudo systemctl restart sshd
+          EOF
+          
+          chmod +x configure_ssh.sh
+          
+          # Exécuter le script sur chaque instance
+          for IP in $GITHUB_RUNNER_IP $SONARQUBE_IP $MONITORING_IP; do
+            echo "Configuring SSH on $IP..."
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_rsa ec2-user@$IP 'bash -s' < configure_ssh.sh "$(cat ~/.ssh/id_rsa.pub)" || echo "Failed to configure $IP"
+          done
+       
       - name: Generate GitHub Runner token
         id: get-runner-token
         continue-on-error: true
