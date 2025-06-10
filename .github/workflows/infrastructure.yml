@@ -257,25 +257,16 @@ jobs:
           SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
           MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
           
-          # Créer un script pour configurer SSH
-          cat > configure_ssh.sh << 'EOF'
-          #!/bin/bash
-          sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
-          sudo sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-          sudo mkdir -p ~/.ssh
-          echo "$1" > ~/.ssh/authorized_keys
-          sudo chmod 700 ~/.ssh
-          sudo chmod 600 ~/.ssh/authorized_keys
-          sudo chown -R ec2-user:ec2-user ~/.ssh
-          sudo systemctl restart sshd
-          EOF
+          # Récupérer la clé SSH utilisée pour le provisionnement Terraform
+          TF_SSH_KEY=$(cat ../terraform/terraform.tfstate | jq -r '.resources[] | select(.type == "aws_key_pair") | .instances[0].attributes.public_key')
           
-          chmod +x configure_ssh.sh
+          # Utiliser cette clé pour la connexion initiale
+          echo "$TF_SSH_KEY" > ~/.ssh/id_rsa.pub
           
-          # Exécuter le script sur chaque instance
+          # Attendre que les instances soient accessibles
           for IP in $GITHUB_RUNNER_IP $SONARQUBE_IP $MONITORING_IP; do
-            echo "Configuring SSH on $IP..."
-            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ~/.ssh/id_rsa ec2-user@$IP 'bash -s' < configure_ssh.sh "$(cat ~/.ssh/id_rsa.pub)" || echo "Failed to configure $IP"
+            echo "Waiting for $IP to be accessible..."
+            timeout 300 bash -c "until nc -z $IP 22; do sleep 5; done" || echo "Timeout waiting for $IP"
           done
        
       - name: Generate GitHub Runner token
