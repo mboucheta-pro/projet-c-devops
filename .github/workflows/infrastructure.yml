@@ -1,4 +1,4 @@
-name: Infrastructure workflow
+name: création de l'infrastructure
 
 on:
   push:
