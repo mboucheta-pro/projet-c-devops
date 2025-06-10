@@ -281,16 +281,21 @@ jobs:
         working-directory: ./infra/ansible
         continue-on-error: true
         run: |
-          # Créer le fichier inventory.ini dynamiquement
+          # Extraire les adresses IP des outputs Terraform
+          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
+          
+          # Créer le fichier inventory.ini dynamiquement avec les adresses IP directement
           cat > inventory.ini << EOF
           [github_runner]
-          github_runner ansible_host=$GITHUB_RUNNER_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+          ${GITHUB_RUNNER_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
           
           [sonarqube]
-          sonarqube ansible_host=$SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+          ${SONARQUBE_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
           
           [monitoring]
-          monitoring ansible_host=$MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+          ${MONITORING_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
           EOF
           
           # Exécuter le playbook avec des options de débogage
