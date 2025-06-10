@@ -35,7 +35,7 @@ env:
   TF_BACKEND_DYNAMODB: projet-c-terraform-locks
 
 jobs:
-  setup-backend:
+  setup-backend-tf:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +100,7 @@ jobs:
           fi
   
   infrastructure:
-    needs: setup-backend
+    needs: setup-backend-tf
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +150,7 @@ jobs:
         working-directory: ./infra/terraform
         run: |
           # Remplacer le placeholder env/ par l'environnement réel dans la clé du backend
-          sed -i "s|key            = \"env/|key            = \"$ENV/|g" backend.tf
+          sed -i "s|key=\"env/|key=\"$ENV/|g" backend.tf
           terraform init
       
       - name: Terraform Validate
@@ -167,7 +167,6 @@ jobs:
 
       - name: Save Terraform Outputs
         working-directory: ./infra/terraform
-        continue-on-error: true
         run: |
           # Extraire tous les outputs Terraform au format JSON dans un fichier
           terraform output -json | grep -v "^::" | grep -v "^\[command\]" > terraform-outputs.json
