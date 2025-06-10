@@ -23,22 +23,22 @@ on:
       cleanup_compute:
         description: 'Supprimer les ressources de calcul (EC2, EKS)'
         required: false
-        default: 'true'
+        default: true
         type: boolean
       cleanup_network:
         description: 'Supprimer les ressources réseau (VPC, SG, EIP)'
         required: false
-        default: 'true'
+        default: true
         type: boolean
       cleanup_storage:
         description: 'Supprimer les ressources de stockage (S3, RDS)'
         required: false
-        default: 'true'
+        default: true
         type: boolean
       cleanup_other:
         description: 'Supprimer les autres ressources (CloudWatch, DynamoDB)'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:
