@@ -285,28 +285,10 @@ jobs:
         working-directory: ./infra/ansible
         continue-on-error: true
         run: |
-          # Extraire les adresses IP des outputs Terraform
-          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' terraform-outputs.json)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
-          
-          # Créer le fichier inventory.ini dynamiquement avec les adresses IP directement
-          cat > inventory.ini << EOF
-          [github_runner]
-          ${GITHUB_RUNNER_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-          
-          [sonarqube]
-          ${SONARQUBE_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-          
-          [monitoring]
-          ${MONITORING_IP} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-          EOF
-          
-          # Exécuter le playbook avec des options de débogage
           export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory.ini playbook.yml \
             -e "github_account=${{ github.repository_owner }} github_repo=${{ github.repository }} runner_token=${{ steps.get-runner-token.outputs.token }}" \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=60' \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10' \
             -vvv
             
   generate-report:
