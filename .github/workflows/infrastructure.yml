@@ -120,7 +120,7 @@ jobs:
       
       - name: Generate DB password
         run: |
-          DB_PASSWORD=$(openssl rand -base64 16)
+          DB_PASSWORD=$(openssl rand -hex 16 | tr -d '/@" ')
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
           if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
             mkdir -p $GITHUB_WORKSPACE/ssh-keys
