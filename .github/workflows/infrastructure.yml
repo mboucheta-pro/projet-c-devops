@@ -2,6 +2,17 @@ name: Création de l'infrastructure
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environnement de déploiement'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - main
+          - all
 
 env:
   AWS_REGION: ca-central-1
@@ -111,49 +122,66 @@ jobs:
       - name: Set environment
         id: set-env
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          SELECTED_ENV="${{ github.event.inputs.environment }}"
+          
+          if [[ "$SELECTED_ENV" == "main" ]]; then
             echo "ENV=production" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
-            echo "ENV=staging" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
-            echo "ENV=development" >> $GITHUB_ENV
+            echo "ENVIRONMENTS=production" >> $GITHUB_ENV
+          elif [[ "$SELECTED_ENV" == "all" ]]; then
+            echo "ENV=all" >> $GITHUB_ENV
+            echo "ENVIRONMENTS=development,staging,production" >> $GITHUB_ENV
           else
-            echo "ENV=development" >> $GITHUB_ENV
+            echo "ENV=$SELECTED_ENV" >> $GITHUB_ENV
+            echo "ENVIRONMENTS=$SELECTED_ENV" >> $GITHUB_ENV
           fi
-          echo $GITHUB_ENV
+          
+          echo "Environnement(s) sélectionné(s): $SELECTED_ENV"
+          echo "Déploiement sur: $(echo $GITHUB_ENV | grep ENVIRONMENTS | cut -d'=' -f2)"
       
-      - name: Terraform Init
+      - name: Deploy Infrastructure
         working-directory: ./infra/terraform
         run: |
-          # Remplacer le placeholder env/ par l'environnement réel dans la clé du backend
-          sed -i "s|key=\"env/|key=\"${{ env.ENV }}/|g" backend.tf
-          terraform init
-      
-      - name: Terraform Validate
-        working-directory: ./infra/terraform
-        run: terraform validate
-      
-      - name: Terraform Plan
-        working-directory: ./infra/terraform
-        run: terraform plan -var="environment=${{ env.ENV }}" -out=tfplan
-      
-      - name: Terraform Apply
-        working-directory: ./infra/terraform
-        run: terraform apply -auto-approve tfplan
-
-      - name: Save Terraform Outputs
-        working-directory: ./infra/terraform
-        run: |
-          # Extraire tous les outputs Terraform au format JSON dans un fichier
-          terraform output -json | grep -v "^::" | grep -v "^\[command\]" > terraform-outputs.json
+          IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
+          
+          for environment in "${ENVS[@]}"; do
+            echo "=== Déploiement pour l'environnement: $environment ==="
+            
+            # Copier les fichiers Terraform dans un répertoire temporaire pour cet environnement
+            mkdir -p "../temp-$environment"
+            cp -r * "../temp-$environment/"
+            cd "../temp-$environment"
+            
+            # Remplacer le placeholder env/ par l'environnement réel dans la clé du backend
+            sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
+            
+            # Terraform Init
+            echo "Initialisation Terraform pour $environment..."
+            terraform init
+            
+            # Terraform Validate
+            echo "Validation Terraform pour $environment..."
+            terraform validate
+            
+            # Terraform Plan
+            echo "Planification Terraform pour $environment..."
+            terraform plan -var="environment=$environment" -out="tfplan-$environment"
+            
+            # Terraform Apply
+            echo "Application Terraform pour $environment..."
+            terraform apply -auto-approve "tfplan-$environment"
+            
+            # Sauvegarder les outputs pour cet environnement
+            terraform output -json > "../../terraform-outputs-$environment.json"
+            
+            cd "../../terraform"
+            echo "=== Fin du déploiement pour $environment ==="
+          done
 
       - name: Upload Terraform Outputs
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
-          path: ./infra/terraform/terraform-outputs.json
+          path: ./infra/terraform-outputs-*.json
           retention-days: 7
       
       - name: Upload SSH keys and DB password
