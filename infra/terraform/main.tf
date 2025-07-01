@@ -275,7 +275,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 18.0"
 
-  cluster_name    = "${var.project}-cluster"
+  cluster_name    = "${var.project}-eks"
   cluster_version = "1.27"
   
   vpc_id     = module.vpc.vpc_id
@@ -287,15 +287,13 @@ module "eks" {
 
   # Node groups optimisés pour les coûts
   eks_managed_node_groups = {
-    workers_EKS = {
+    workers = {
       desired_size = 2
       min_size     = 1
       max_size     = 3
 
       instance_types = ["t3a.medium"]
       capacity_type  = "SPOT" # Utilisation des instances Spot pour réduire les coûts
-      
-      name = "${var.project}-cluster-worker-eks"
     }
   }
 
