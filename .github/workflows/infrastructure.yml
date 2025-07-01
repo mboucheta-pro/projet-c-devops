@@ -112,8 +112,6 @@ jobs:
         run: |
           DB_PASSWORD=$(openssl rand -hex 16 | tr -d '/@" ')
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
-          mkdir -p $GITHUB_WORKSPACE/credentials
-          echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/credentials/db_password.txt
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -135,20 +133,16 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp tfplan s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan
-          aws s3 cp tfplan.txt s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan.txt
       
       - name: Upload Terraform Plan (local artifact)
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan
           path: |
-            ${{ github.workspace }}/infra/terraform/tfplan
             ${{ github.workspace }}/infra/terraform/tfplan.txt
           retention-days: 7
       
-      - name: Upload DB password to S3
-        run: |
-          aws s3 cp $GITHUB_WORKSPACE/credentials/db_password.txt s3://${{ env.TF_BACKEND_BUCKET }}/credentials/db_password.txt
+
 
   terraform-apply:
     needs: terraform-plan
@@ -164,11 +158,7 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
-      - name: Download DB password from S3
-        run: |
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/db_password.txt $GITHUB_WORKSPACE/db_password.txt
-          echo "TF_VAR_db_password=$(cat $GITHUB_WORKSPACE/db_password.txt)" >> $GITHUB_ENV
-      
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -178,7 +168,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan.txt tfplan.txt
       
       - name: Execute Terraform Apply/Destroy
         run: |
@@ -237,13 +226,13 @@ jobs:
           
           cat > inventory.ini << EOF
           [github-runner]
-          $GITHUB_RUNNER_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $GITHUB_RUNNER_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [sonarqube]
-          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [monitoring]
-          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           EOF
       
       - name: Generate GitHub Runner token
@@ -279,7 +268,7 @@ jobs:
           echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
-      
+            
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:

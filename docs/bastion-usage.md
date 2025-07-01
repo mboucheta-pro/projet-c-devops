@@ -11,7 +11,7 @@ Ce document explique comment utiliser le bastion host pour accéder de manière 
 ## Connexion au bastion
 
 ```bash
-ssh -i chemin/vers/cle_privee ec2-user@<BASTION_IP>
+ssh -i chemin/vers/cle_privee ubuntu@<BASTION_IP>
 ```
 
 Remplacez `<BASTION_IP>` par l'adresse IP du bastion disponible dans les outputs Terraform.
@@ -21,7 +21,7 @@ Remplacez `<BASTION_IP>` par l'adresse IP du bastion disponible dans les outputs
 ### Méthode 1: Utilisation de ProxyJump (recommandée)
 
 ```bash
-ssh -i chemin/vers/cle_privee -J ec2-user@<BASTION_IP> ec2-user@<INSTANCE_PRIVATE_IP>
+ssh -i chemin/vers/cle_privee -J ubuntu@<BASTION_IP> ubuntu@<INSTANCE_PRIVATE_IP>
 ```
 
 Remplacez `<INSTANCE_PRIVATE_IP>` par l'adresse IP privée de l'instance cible.
@@ -33,12 +33,12 @@ Ajoutez les lignes suivantes à votre fichier `~/.ssh/config` :
 ```
 Host bastion
     HostName <BASTION_IP>
-    User ec2-user
+    User ubuntu
     IdentityFile chemin/vers/cle_privee
 
 Host instance-*
     ProxyJump bastion
-    User ec2-user
+    User ubuntu
     IdentityFile chemin/vers/cle_privee
 
 Host instance-github-runner
@@ -62,7 +62,7 @@ ssh instance-github-runner
 ### Méthode 1: Tunnel SSH
 
 ```bash
-ssh -i chemin/vers/cle_privee -L 3306:<DB_ENDPOINT>:3306 ec2-user@<BASTION_IP>
+ssh -i chemin/vers/cle_privee -L 3306:<DB_ENDPOINT>:3306 ubuntu@<BASTION_IP>
 ```
 
 Puis, dans un autre terminal :
@@ -76,7 +76,7 @@ mysql -h 127.0.0.1 -u <DB_USERNAME> -p
 1. Connectez-vous d'abord au bastion :
 
 ```bash
-ssh -i chemin/vers/cle_privee ec2-user@<BASTION_IP>
+ssh -i chemin/vers/cle_privee ubuntu@<BASTION_IP>
 ```
 
 2. Puis, depuis le bastion, connectez-vous à la base de données :
