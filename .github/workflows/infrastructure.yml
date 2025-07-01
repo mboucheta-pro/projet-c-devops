@@ -19,6 +19,14 @@ on:
         options:
           - 'no'
           - 'yes'
+      instances_state:
+        description: 'État des instances (running = actives, stopped = arrêtées pour économiser)'
+        required: true
+        default: 'running'
+        type: choice
+        options:
+          - 'running'
+          - 'stopped'
 
 env:
   AWS_REGION: ca-central-1
@@ -129,13 +137,15 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
+          INSTANCES_RUNNING=$([[ "${{ github.event.inputs.instances_state }}" == "running" ]] && echo "true" || echo "false")
+          
           if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
             terraform validate
-            terraform plan -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan"
+            terraform plan -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
             terraform show -no-color "tfplan" > "tfplan.txt"
           else
             sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-            terraform plan -destroy -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan"
+            terraform plan -destroy -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
             terraform show -no-color "tfplan" > "tfplan.txt"
           fi
 

@@ -106,6 +106,8 @@ resource "aws_security_group" "instances" {
 
 # GitHub Runner
 resource "aws_instance" "github-runner" {
+  count = var.instances_running ? 1 : 0
+  
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
   instance_type = "t3a.small" # Bon équilibre coût/performance
   subnet_id     = module.vpc.public_subnets[0]
@@ -139,6 +141,8 @@ resource "aws_instance" "github-runner" {
 
 # SonarQube Server
 resource "aws_instance" "sonarqube" {
+  count = var.instances_running ? 1 : 0
+  
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = module.vpc.public_subnets[0]
@@ -170,6 +174,8 @@ resource "aws_instance" "sonarqube" {
 
 # Monitoring Server (Prometheus + Grafana)
 resource "aws_instance" "monitoring" {
+  count = var.instances_running ? 1 : 0
+  
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
   instance_type = "t3a.small"
   subnet_id     = module.vpc.public_subnets[0]
@@ -285,7 +291,7 @@ module "eks" {
   cluster_endpoint_public_access  = true
 
   # Node groups optimisés pour les coûts
-  eks_managed_node_groups = {
+  eks_managed_node_groups = var.instances_running ? {
     workers = {
       desired_size = 2
       min_size     = 1
@@ -293,6 +299,15 @@ module "eks" {
 
       instance_types = ["t3a.medium"]
       capacity_type  = "SPOT" # Utilisation des instances Spot pour réduire les coûts
+    }
+  } : {
+    workers = {
+      desired_size = 0
+      min_size     = 0
+      max_size     = 3
+
+      instance_types = ["t3a.medium"]
+      capacity_type  = "SPOT"
     }
   }
 
