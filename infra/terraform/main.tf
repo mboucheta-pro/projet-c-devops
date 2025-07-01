@@ -11,7 +11,7 @@ locals {
 }
 
 # Utiliser la key-pair AWS existante
-data "aws_key_pair" "deployer" {
+data "aws_key_pair" "projet-c" {
   key_name = "projet-c"
 }
 
@@ -107,7 +107,7 @@ resource "aws_instance" "github-runner" {
   instance_type = "t3a.small" # Bon équilibre coût/performance
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = data.aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.projet-c.key_name
   
   root_block_device {
     volume_size = 20
@@ -131,7 +131,7 @@ resource "aws_instance" "sonarqube" {
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = data.aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.projet-c.key_name
   
   root_block_device {
     volume_size = 30
@@ -155,7 +155,7 @@ resource "aws_instance" "monitoring" {
   instance_type = "t3a.small"
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = data.aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.projet-c.key_name
   
   root_block_device {
     volume_size = 20
