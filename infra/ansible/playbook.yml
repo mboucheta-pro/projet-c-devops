@@ -5,15 +5,16 @@
   gather_facts: false
   remote_user: ubuntu
   vars:
-    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   tasks:
     - name: Installer les dépendances
-      yum:
+      apt:
         name:
           - git
-          - docker
+          - docker.io
         state: present
+        update_cache: yes
       ignore_errors: true
       
     - name: Démarrer et activer Docker
@@ -85,12 +86,13 @@
         timeout: 300
       
     - name: Installer les dépendances
-      yum:
+      apt:
         name:
-          - java-17-amazon-corretto
+          - openjdk-17-jdk
           - unzip
           - wget
         state: present
+        update_cache: yes
       ignore_errors: true
       
     - name: Créer l'utilisateur sonarqube
@@ -169,11 +171,12 @@
         timeout: 300
       
     - name: Installer les dépendances
-      yum:
+      apt:
         name:
-          - docker
+          - docker.io
           - docker-compose
         state: present
+        update_cache: yes
       ignore_errors: true
       
     - name: Démarrer et activer Docker
