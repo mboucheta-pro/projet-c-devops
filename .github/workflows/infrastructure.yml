@@ -214,3 +214,73 @@ jobs:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
           retention-days: 7
+
+  configure-instances:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy' && github.event.inputs.instances_state == 'running'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Terraform Outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}
+      
+      - name: Download SSH keys
+        uses: actions/download-artifact@v4
+        with:
+          name: credentials
+          path: ${{ github.workspace }}/ssh-keys
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install Ansible
+        run: pip install ansible
+      
+      - name: Create Ansible inventory
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          cat > inventory.ini << EOF
+          [github-runner]
+          $(jq -r '."github-runner_ip".value' $GITHUB_WORKSPACE/terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          
+          [sonarqube]
+          $(jq -r '.sonarqube_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          
+          [monitoring]
+          $(jq -r '.monitoring_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          EOF
+      
+      - name: Generate GitHub Runner token
+        id: runner-token
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token)
+          
+          RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
+          echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          cp $GITHUB_WORKSPACE/ssh-keys/id_rsa ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          echo "Attente de 60 secondes pour que les instances soient prêtes..."
+          sleep 60
+      
+      - name: Run Ansible playbook
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory.ini playbook.yml \
+            -e "github_repo=${{ github.repository }}" \
+            -e "runner_token=${{ steps.runner-token.outputs.token }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
