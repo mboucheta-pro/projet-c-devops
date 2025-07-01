@@ -3,7 +3,6 @@ name: Gestion de l'infrastructure
 permissions:
   contents: read
   actions: write
-  administration: write
 
 on:
   workflow_dispatch:
