@@ -3,6 +3,14 @@ name: Création de l'infrastructure
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: 'Action à effectuer'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - destroy
       environment:
         description: 'Environnement de déploiement'
         required: true
@@ -87,7 +95,7 @@ jobs:
             echo "DynamoDB table ${{ env.TF_BACKEND_DYNAMODB }} already exists"
           fi
   
-  infrastructure:
+  terraform-plan:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
     steps:
@@ -101,6 +109,7 @@ jobs:
           rm aws-credentials.json
       
       - name: Generate SSH key pair
+        if: github.event.inputs.action == 'deploy'
         run: |
           ssh-keygen -t rsa -b 4096 -f id_rsa -N ""
           echo "TF_VAR_ssh_public_key=$(cat id_rsa.pub)" >> $GITHUB_ENV
@@ -109,6 +118,7 @@ jobs:
           cp id_rsa.pub ssh-keys/
       
       - name: Generate DB password
+        if: github.event.inputs.action == 'deploy'
         run: |
           DB_PASSWORD=$(openssl rand -base64 16)
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
@@ -138,61 +148,122 @@ jobs:
           echo "Environnement(s) sélectionné(s): $SELECTED_ENV"
           echo "Déploiement sur: $(echo $GITHUB_ENV | grep ENVIRONMENTS | cut -d'=' -f2)"
       
-      - name: Deploy Infrastructure
+      - name: Terraform Plan
         working-directory: ./infra/terraform
         run: |
+          ACTION="${{ github.event.inputs.action }}"
           IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
           
           for environment in "${ENVS[@]}"; do
-            echo "=== Déploiement pour l'environnement: $environment ==="
+            echo "=== Plan pour l'environnement: $environment ==="
             
-            # Copier les fichiers Terraform dans un répertoire temporaire pour cet environnement
             mkdir -p "../temp-$environment"
             cp -r * "../temp-$environment/"
             cd "../temp-$environment"
             
-            # Remplacer le placeholder env/ par l'environnement réel dans la clé du backend
             sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
             
-            # Terraform Init
-            echo "Initialisation Terraform pour $environment..."
             terraform init
             
-            # Terraform Validate
-            echo "Validation Terraform pour $environment..."
-            terraform validate
+            if [[ "$ACTION" == "deploy" ]]; then
+              terraform validate
+              terraform plan -var="environment=$environment" -out="tfplan-$environment"
+            else
+              terraform plan -destroy -var="environment=$environment" -out="tfplan-$environment"
+            fi
             
-            # Terraform Plan
-            echo "Planification Terraform pour $environment..."
-            terraform plan -var="environment=$environment" -out="tfplan-$environment"
-            
-            # Terraform Apply
-            echo "Application Terraform pour $environment..."
-            terraform apply -auto-approve "tfplan-$environment"
-            
-            # Sauvegarder les outputs pour cet environnement
-            terraform output -json > "/infra/terraform/terraform-outputs-$environment.json"
-            
-            cd "/infra/terraform"
-            echo "=== Fin du déploiement pour $environment ==="
+            cp "tfplan-$environment" "../../tfplan-$environment"
+            cd "../../terraform"
           done
 
-      - name: Upload Terraform Outputs
+      - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-outputs
-          path: ./infra/terraform-outputs-*.json
+          name: terraform-plans
+          path: ./infra/tfplan-*
           retention-days: 7
       
       - name: Upload SSH keys and DB password
+        if: github.event.inputs.action == 'deploy'
         uses: actions/upload-artifact@v4
         with:
           name: credentials
           path: ./ssh-keys/
           retention-days: 7
+
+  terraform-apply:
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    environment: manual-approval
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Decode AWS credentials
+        run: |
+          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          rm aws-credentials.json
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.0.0
+      
+      - name: Set environment
+        run: |
+          SELECTED_ENV="${{ github.event.inputs.environment }}"
+          if [[ "$SELECTED_ENV" == "main" ]]; then
+            echo "ENVIRONMENTS=production" >> $GITHUB_ENV
+          elif [[ "$SELECTED_ENV" == "all" ]]; then
+            echo "ENVIRONMENTS=development,staging,production" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENTS=$SELECTED_ENV" >> $GITHUB_ENV
+          fi
+      
+      - name: Download Terraform Plans
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plans
+          path: ./infra/terraform
+      
+      - name: Execute Terraform Apply/Destroy
+        working-directory: ./infra/terraform
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
+          
+          for environment in "${ENVS[@]}"; do
+            mkdir -p "../temp-$environment"
+            cp -r * "../temp-$environment/"
+            cd "../temp-$environment"
+            
+            sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
+            terraform init
+            
+            if [[ "$ACTION" == "deploy" ]]; then
+              echo "=== Application pour $environment ==="
+              terraform apply -auto-approve "tfplan-$environment"
+              terraform output -json > "../../terraform-outputs-$environment.json"
+            else
+              echo "=== Destruction pour $environment ==="
+              terraform apply -auto-approve "tfplan-$environment"
+            fi
+            
+            cd "../../terraform"
+          done
+      
+      - name: Upload Terraform Outputs
+        if: github.event.inputs.action == 'deploy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ./infra/terraform-outputs-*.json
+          retention-days: 7
   
   configure-servers:
-    needs: infrastructure
+    needs: terraform-apply
+    if: github.event.inputs.action == 'deploy'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
