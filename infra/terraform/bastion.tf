@@ -4,7 +4,7 @@ resource "aws_instance" "bastion" {
   instance_type          = "t3a.nano" # Taille minimale pour un bastion
   subnet_id              = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.bastion.id]
-  key_name               = aws_key_pair.projet-c.key_name
+  key_name               = data.aws_key_pair.projet-c.key_name
   
   root_block_device {
     volume_size = 8
