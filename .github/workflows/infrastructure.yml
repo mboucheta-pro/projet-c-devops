@@ -22,7 +22,7 @@ on:
           - main
           - all
       confirm_apply:
-        description: 'Confirmer l\'application (après avoir vérifié le plan)'
+        description: 'Confirmer apply (après avoir vérifié le plan)'
         required: true
         default: 'no'
         type: choice
