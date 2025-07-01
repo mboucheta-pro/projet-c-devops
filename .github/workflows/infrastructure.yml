@@ -89,6 +89,7 @@ jobs:
   terraform-plan:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_apply == 'no'
     steps:
       - uses: actions/checkout@v4
       
@@ -156,7 +157,7 @@ jobs:
           retention-days: 7
 
   terraform-apply:
-    needs: terraform-plan
+    needs: setup-backend-tf
     runs-on: ubuntu-latest
     if: github.event.inputs.confirm_apply == 'yes'
     steps:
@@ -174,11 +175,13 @@ jobs:
         with:
           terraform_version: 1.0.0
       
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
+      - name: Download latest Terraform Plan
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: infrastructure.yml
           name: terraform-plan
           path: ${{ github.workspace }}/infra/terraform
+          search_artifacts: true
       
       - name: Execute Terraform Apply/Destroy
         run: |
