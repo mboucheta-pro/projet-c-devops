@@ -171,9 +171,9 @@ jobs:
             terraform apply -auto-approve "tfplan-$environment"
             
             # Sauvegarder les outputs pour cet environnement
-            terraform output -json > "../../terraform-outputs-$environment.json"
+            terraform output -json > "/infra/terraform/terraform-outputs-$environment.json"
             
-            cd "../../terraform"
+            cd "/infra/terraform"
             echo "=== Fin du déploiement pour $environment ==="
           done
 
