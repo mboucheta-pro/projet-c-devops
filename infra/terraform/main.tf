@@ -217,6 +217,17 @@ resource "aws_security_group" "db" {
   }
 }
 
+# Secret pour le mot de passe DB
+resource "aws_secretsmanager_secret" "db_password" {
+  name = "${var.project}/db/password"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = var.db_password
+}
+
 resource "aws_db_instance" "database" {
   allocated_storage      = 20
   storage_type           = "gp3"
@@ -226,7 +237,8 @@ resource "aws_db_instance" "database" {
   identifier             = "${var.project}-db"
   db_name                = "appdb"
   username               = var.db_username
-  password               = var.db_password
+  manage_master_user_password = true
+  master_user_secret_kms_key_id = aws_secretsmanager_secret.db_password.kms_key_id
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.db.id]
   skip_final_snapshot    = true
@@ -236,7 +248,6 @@ resource "aws_db_instance" "database" {
   tags = local.tags
 
   lifecycle {
-    ignore_changes = [password]
     prevent_destroy = true
   }
 }
