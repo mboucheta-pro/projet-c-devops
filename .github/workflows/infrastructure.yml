@@ -12,7 +12,7 @@ on:
           - deploy
           - destroy
       confirm_destroy:
-        description: 'Confirmer la destruction (ATTENTION: supprime toute l\'infrastructure)'
+        description: 'Confirmer la destruction (IRRÉVERSIBLE)'
         required: false
         default: 'no'
         type: choice
