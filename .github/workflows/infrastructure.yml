@@ -191,6 +191,16 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
+      - name: Download SSH keys from S3
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/ssh-keys
+          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ $GITHUB_WORKSPACE/ssh-keys/ --recursive
+          echo "TF_VAR_ssh_public_key=$(cat $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub)" >> $GITHUB_ENV
+      
+      - name: Download DB password from S3
+        run: |
+          echo "TF_VAR_db_password=$(cat $GITHUB_WORKSPACE/ssh-keys/db_password.txt)" >> $GITHUB_ENV
+      
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -246,6 +256,9 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/ssh-keys
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ $GITHUB_WORKSPACE/ssh-keys/ --recursive
+          
+          echo "Clés SSH téléchargées:"
+          ls -la $GITHUB_WORKSPACE/ssh-keys/
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -302,8 +315,19 @@ jobs:
           cp $GITHUB_WORKSPACE/ssh-keys/id_rsa ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          echo "Attente de 60 secondes pour que les instances soient prêtes..."
-          sleep 60
+          echo "Clé SSH configurée:"
+          ls -la ~/.ssh/
+          echo "Empreinte de la clé publique:"
+          ssh-keygen -lf $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub
+          
+          echo "Test de connectivité SSH..."
+          for ip in $(grep -E '^[0-9]' $GITHUB_WORKSPACE/infra/ansible/inventory.ini | awk '{print $1}'); do
+            echo "Test connexion vers $ip"
+            timeout 10 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@$ip 'echo "SSH OK"' || echo "Échec connexion $ip"
+          done
+          
+          echo "Attente de 30 secondes supplémentaires..."
+          sleep 30
       
       - name: Run Ansible playbook
         run: |
