@@ -309,7 +309,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
           export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i inventory.ini playbook.yml \
+          ansible-playbook -i inventory.ini playbook.yml -vvv \
             -e "github_repo=${{ github.repository }}" \
             -e "runner_token=${{ steps.runner-token.outputs.token }}" \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
