@@ -11,9 +11,9 @@ on:
         options:
           - deploy
           - destroy
-      confirm_apply:
-        description: 'Confirmer apply (après avoir vérifié le plan)'
-        required: true
+      confirm_destroy:
+        description: 'Confirmer la destruction (ATTENTION: supprime toute l\'infrastructure)'
+        required: false
         default: 'no'
         type: choice
         options:
@@ -97,7 +97,7 @@ jobs:
   terraform-plan:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
-    if: github.event.inputs.confirm_apply == 'no'
+    if: github.event.inputs.action == 'deploy'
     steps:
       - uses: actions/checkout@v4
       
@@ -178,9 +178,9 @@ jobs:
           retention-days: 7
 
   terraform-apply:
-    needs: setup-backend-tf
+    needs: terraform-plan
     runs-on: ubuntu-latest
-    if: github.event.inputs.confirm_apply == 'yes'
+    if: github.event.inputs.action == 'deploy' || (github.event.inputs.action == 'destroy' && github.event.inputs.confirm_destroy == 'yes')
     steps:
       - uses: actions/checkout@v4
       
@@ -231,6 +231,32 @@ jobs:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
           retention-days: 7
+
+  terraform-destroy:
+    needs: setup-backend-tf
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm_destroy == 'yes'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Decode AWS credentials
+        run: |
+          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          rm aws-credentials.json
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.0.0
+      
+      - name: Terraform Destroy
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+          terraform destroy -auto-approve -var="db_password=dummy" -var="ssh_public_key=dummy" -var="instances_running=false"
 
   configure-instances:
     needs: terraform-apply
