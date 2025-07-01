@@ -1,4 +1,4 @@
-name: Création de l'infrastructure
+name: Gestion de l'infrastructure
 
 on:
   workflow_dispatch:
