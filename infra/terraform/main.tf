@@ -287,7 +287,7 @@ module "eks" {
 
   # Node groups optimisés pour les coûts
   eks_managed_node_groups = {
-    workers = {
+    workers_EKS = {
       desired_size = 2
       min_size     = 1
       max_size     = 3
