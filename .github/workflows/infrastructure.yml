@@ -164,6 +164,11 @@ jobs:
             ${{ github.workspace }}/infra/terraform/tfplan.txt
           retention-days: 7
       
+      - name: Upload SSH keys to S3
+        if: github.event.inputs.action == 'deploy'
+        run: |
+          aws s3 cp $GITHUB_WORKSPACE/ssh-keys/ s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ --recursive
+      
       - name: Upload SSH keys and DB password
         if: github.event.inputs.action == 'deploy'
         uses: actions/upload-artifact@v4
@@ -228,11 +233,17 @@ jobs:
           name: terraform-outputs
           path: ${{ github.workspace }}
       
-      - name: Download SSH keys
-        uses: actions/download-artifact@v4
-        with:
-          name: credentials
-          path: ${{ github.workspace }}/ssh-keys
+      - name: Decode AWS credentials
+        run: |
+          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+          rm aws-credentials.json
+      
+      - name: Download SSH keys from S3
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/ssh-keys
+          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ $GITHUB_WORKSPACE/ssh-keys/ --recursive
       
       - name: Set up Python
         uses: actions/setup-python@v4
