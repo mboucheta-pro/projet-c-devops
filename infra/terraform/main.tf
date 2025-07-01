@@ -294,6 +294,8 @@ module "eks" {
 
       instance_types = ["t3a.medium"]
       capacity_type  = "SPOT" # Utilisation des instances Spot pour réduire les coûts
+      
+      name = "${var.project}-cluster-worker-eks"
     }
   }
 
