@@ -1,16 +1,16 @@
 output "github-runner_ip" {
   description = "Adresse IP publique du runner GitHub"
-  value       = aws_instance.github-runner.public_ip
+  value       = var.instances_running ? aws_instance.github-runner[0].public_ip : null
 }
 
 output "sonarqube_ip" {
   description = "Adresse IP publique du serveur SonarQube"
-  value       = aws_instance.sonarqube.public_ip
+  value       = var.instances_running ? aws_instance.sonarqube[0].public_ip : null
 }
 
 output "monitoring_ip" {
   description = "Adresse IP publique du serveur de monitoring"
-  value       = aws_instance.monitoring.public_ip
+  value       = var.instances_running ? aws_instance.monitoring[0].public_ip : null
 }
 
 output "db_endpoint" {
