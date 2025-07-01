@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
 
   tags = merge(local.tags, {
-    Name = "${var.project}-vpc-${var.environment}"
+    Name = "${var.project}-vpc"
   })
 }
 
@@ -18,7 +18,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = merge(local.tags, {
-    Name = "${var.project}-public-${count.index + 1}-${var.environment}"
+    Name = "${var.project}-public-${count.index + 1}"
   })
 }
 
@@ -30,7 +30,7 @@ resource "aws_subnet" "private" {
   availability_zone = "${var.region}${count.index == 0 ? "a" : "b"}"
 
   tags = merge(local.tags, {
-    Name = "${var.project}-private-${count.index + 1}-${var.environment}"
+    Name = "${var.project}-private-${count.index + 1}"
   })
 }
 
@@ -39,14 +39,14 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = merge(local.tags, {
-    Name = "${var.project}-igw-${var.environment}"
+    Name = "${var.project}-igw"
   })
 }
 
 # EIP pour NAT Gateway
 resource "aws_eip" "nat" {
   tags = merge(local.tags, {
-    Name = "${var.project}-nat-eip-${var.environment}"
+    Name = "${var.project}-nat-eip"
   })
 }
 
@@ -56,7 +56,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
 
   tags = merge(local.tags, {
-    Name = "${var.project}-nat-${var.environment}"
+    Name = "${var.project}-nat"
   })
 
   depends_on = [aws_internet_gateway.main]
@@ -72,7 +72,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = merge(local.tags, {
-    Name = "${var.project}-public-rt-${var.environment}"
+    Name = "${var.project}-public-rt"
   })
 }
 
@@ -86,7 +86,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = merge(local.tags, {
-    Name = "${var.project}-private-rt-${var.environment}"
+    Name = "${var.project}-private-rt"
   })
 }
 
