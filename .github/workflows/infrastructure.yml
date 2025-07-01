@@ -301,15 +301,17 @@ jobs:
       - name: Create Ansible inventory
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
+          # Utiliser le premier fichier terraform-outputs trouvé
+          OUTPUTS_FILE=$(ls terraform-outputs-*.json | head -1)
           cat > inventory.ini << EOF
           [github_runner]
-          $(jq -r '.github_runner_ip.value' terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $(jq -r '.github_runner_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
           
           [sonarqube]
-          $(jq -r '.sonarqube_ip.value' terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $(jq -r '.sonarqube_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
           
           [monitoring]
-          $(jq -r '.monitoring_ip.value' terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $(jq -r '.monitoring_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
           EOF
           cat inventory.ini
 
@@ -328,9 +330,11 @@ jobs:
       - name: Configure SSH on instances
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
-          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' terraform-outputs.json)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
+          # Utiliser le premier fichier terraform-outputs trouvé
+          OUTPUTS_FILE=$(ls terraform-outputs-*.json | head -1)
+          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' $OUTPUTS_FILE)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' $OUTPUTS_FILE)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value' $OUTPUTS_FILE)
           
           for IP in $GITHUB_RUNNER_IP $SONARQUBE_IP $MONITORING_IP; do
             echo "Waiting for $IP to be accessible..."
