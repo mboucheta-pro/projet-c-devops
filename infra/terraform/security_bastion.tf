@@ -1,6 +1,6 @@
 # Groupe de sécurité pour le bastion
 resource "aws_security_group" "bastion" {
-  name        = "${var.project}-bastion-sg-${var.environment}"
+  name        = "${var.project}-bastion-sg"
   description = "Security group for bastion host"
   vpc_id      = module.vpc.vpc_id
 
@@ -21,7 +21,7 @@ resource "aws_security_group" "bastion" {
   }
 
   tags = merge(local.tags, {
-    Name = "${var.project}-bastion-sg-${var.environment}"
+    Name = "${var.project}-bastion-sg"
   })
 
   lifecycle {

@@ -1,6 +1,6 @@
 # Groupe de sécurité pour l'ALB (Application Load Balancer)
 resource "aws_security_group" "alb" {
-  name        = "${var.project}-alb-sg-${var.environment}"
+  name        = "${var.project}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = module.vpc.vpc_id
 
@@ -27,7 +27,7 @@ resource "aws_security_group" "alb" {
   }
 
   tags = merge(local.tags, {
-    Name = "${var.project}-alb-sg-${var.environment}"
+    Name = "${var.project}-alb-sg"
   })
 
   lifecycle {

@@ -22,7 +22,7 @@ resource "aws_instance" "bastion" {
   EOF
 
   tags = merge(local.tags, {
-    Name = "${var.project}-bastion-${var.environment}"
+    Name = "${var.project}-bastion"
   })
 
   lifecycle {
@@ -35,7 +35,7 @@ resource "aws_eip" "bastion" {
   instance = aws_instance.bastion.id
   
   tags = merge(local.tags, {
-    Name = "${var.project}-bastion-eip-${var.environment}"
+    Name = "${var.project}-bastion-eip"
   })
 
   lifecycle {
