@@ -158,6 +158,10 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
+      - name: Generate DB password
+        run: |
+          DB_PASSWORD=$(openssl rand -hex 16 | tr -d '/@" ')
+          echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2

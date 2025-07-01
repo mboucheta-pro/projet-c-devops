@@ -237,8 +237,7 @@ resource "aws_db_instance" "database" {
   identifier             = "${var.project}-db"
   db_name                = "appdb"
   username               = var.db_username
-  manage_master_user_password = true
-  master_user_secret_kms_key_id = aws_secretsmanager_secret.db_password.kms_key_id
+  password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.db.id]
   skip_final_snapshot    = true
@@ -248,6 +247,7 @@ resource "aws_db_instance" "database" {
   tags = local.tags
 
   lifecycle {
+    ignore_changes = [password]
     prevent_destroy = true
   }
 }
