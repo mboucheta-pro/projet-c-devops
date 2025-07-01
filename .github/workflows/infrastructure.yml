@@ -109,20 +109,23 @@ jobs:
           rm aws-credentials.json
       
       - name: Generate SSH key pair
-        if: github.event.inputs.action == 'deploy'
         run: |
           ssh-keygen -t rsa -b 4096 -f $GITHUB_WORKSPACE/id_rsa -N ""
           echo "TF_VAR_ssh_public_key=$(cat $GITHUB_WORKSPACE/id_rsa.pub)" >> $GITHUB_ENV
-          mkdir -p $GITHUB_WORKSPACE/ssh-keys
-          cp $GITHUB_WORKSPACE/id_rsa $GITHUB_WORKSPACE/ssh-keys/
-          cp $GITHUB_WORKSPACE/id_rsa.pub $GITHUB_WORKSPACE/ssh-keys/
+          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
+            mkdir -p $GITHUB_WORKSPACE/ssh-keys
+            cp $GITHUB_WORKSPACE/id_rsa $GITHUB_WORKSPACE/ssh-keys/
+            cp $GITHUB_WORKSPACE/id_rsa.pub $GITHUB_WORKSPACE/ssh-keys/
+          fi
       
       - name: Generate DB password
-        if: github.event.inputs.action == 'deploy'
         run: |
           DB_PASSWORD=$(openssl rand -base64 16)
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
-          echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/ssh-keys/db_password.txt
+          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
+            mkdir -p $GITHUB_WORKSPACE/ssh-keys
+            echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/ssh-keys/db_password.txt
+          fi
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -166,9 +169,9 @@ jobs:
             
             if [[ "$ACTION" == "deploy" ]]; then
               terraform validate
-              terraform plan -var="environment=$environment" -out="tfplan-$environment"
+              terraform plan -var="environment=$environment" -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan-$environment"
             else
-              terraform plan -destroy -var="environment=$environment" -out="tfplan-$environment"
+              terraform plan -destroy -var="environment=$environment" -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan-$environment"
             fi
             
             cp "tfplan-$environment" "$GITHUB_WORKSPACE/tfplan-$environment"
