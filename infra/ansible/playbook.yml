@@ -1,6 +1,6 @@
 ---
-- name: Configuration du GitHub Runner
-  hosts: github_runner
+- name: Configuration du runner GitHub
+  hosts: github-runner
   become: true
   gather_facts: false
   remote_user: ec2-user

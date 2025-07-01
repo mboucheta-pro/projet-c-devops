@@ -1,6 +1,6 @@
-output "github_runner_ip" {
+output "github-runner_ip" {
   description = "Adresse IP publique du runner GitHub"
-  value       = aws_instance.github_runner.public_ip
+  value       = aws_instance.github-runner.public_ip
 }
 
 output "sonarqube_ip" {
