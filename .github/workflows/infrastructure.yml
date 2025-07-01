@@ -11,16 +11,6 @@ on:
         options:
           - deploy
           - destroy
-      environment:
-        description: 'Environnement cible'
-        required: true
-        default: 'development'
-        type: choice
-        options:
-          - development
-          - staging
-          - main
-          - all
       confirm_apply:
         description: 'Confirmer apply (après avoir vérifié le plan)'
         required: true
@@ -64,12 +54,10 @@ jobs:
               --region ${{ env.AWS_REGION }} \
               --create-bucket-configuration LocationConstraint=${{ env.AWS_REGION }}
             
-            # Activer le versionnement
             aws s3api put-bucket-versioning \
               --bucket ${{ env.TF_BACKEND_BUCKET }} \
               --versioning-configuration Status=Enabled
             
-            # Activer le chiffrement
             aws s3api put-bucket-encryption \
               --bucket ${{ env.TF_BACKEND_BUCKET }} \
               --server-side-encryption-configuration '{
@@ -82,12 +70,9 @@ jobs:
                 ]
               }'
             
-            # Bloquer l'accès public
             aws s3api put-public-access-block \
               --bucket ${{ env.TF_BACKEND_BUCKET }} \
               --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
-          else
-            echo "S3 bucket ${{ env.TF_BACKEND_BUCKET }} already exists"
           fi
       
       - name: Create DynamoDB table if not exists
@@ -99,8 +84,6 @@ jobs:
               --attribute-definitions AttributeName=LockID,AttributeType=S \
               --key-schema AttributeName=LockID,KeyType=HASH \
               --billing-mode PAY_PER_REQUEST
-          else
-            echo "DynamoDB table ${{ env.TF_BACKEND_DYNAMODB }} already exists"
           fi
   
   terraform-plan:
@@ -140,63 +123,28 @@ jobs:
         with:
           terraform_version: 1.0.0
       
-      - name: Set environment
-        id: set-env
-        run: |
-          SELECTED_ENV="${{ github.event.inputs.environment }}"
-          
-          if [[ "$SELECTED_ENV" == "main" ]]; then
-            echo "ENV=production" >> $GITHUB_ENV
-            echo "ENVIRONMENTS=production" >> $GITHUB_ENV
-          elif [[ "$SELECTED_ENV" == "all" ]]; then
-            echo "ENV=all" >> $GITHUB_ENV
-            echo "ENVIRONMENTS=development,staging,production" >> $GITHUB_ENV
-          else
-            echo "ENV=$SELECTED_ENV" >> $GITHUB_ENV
-            echo "ENVIRONMENTS=$SELECTED_ENV" >> $GITHUB_ENV
-          fi
-          
-          echo "Environnement(s) sélectionné(s): $SELECTED_ENV"
-          echo "Déploiement sur: $(echo $GITHUB_ENV | grep ENVIRONMENTS | cut -d'=' -f2)"
-      
       - name: Terraform Plan
         run: |
-          ACTION="${{ github.event.inputs.action }}"
-          IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
           
-          for environment in "${ENVS[@]}"; do
-            echo "=== Plan pour l'environnement: $environment ==="
-            
-            mkdir -p "$GITHUB_WORKSPACE/temp-$environment"
-            cp -r $GITHUB_WORKSPACE/infra/terraform/* "$GITHUB_WORKSPACE/temp-$environment/"
-            cd "$GITHUB_WORKSPACE/temp-$environment"
-            
-            sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
-            
-            terraform init
-            
-            if [[ "$ACTION" == "deploy" ]]; then
-              terraform validate
-              terraform plan -var="environment=$environment" -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan-$environment"
-              terraform show -no-color "tfplan-$environment" > "tfplan-$environment.txt"
-            else
-              # Désactiver prevent_destroy pour la destruction
-              sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-              terraform plan -destroy -var="environment=$environment" -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan-$environment"
-              terraform show -no-color "tfplan-$environment" > "tfplan-$environment.txt"
-            fi
-            
-            cp "tfplan-$environment" "$GITHUB_WORKSPACE/tfplan-$environment"
-            cp "tfplan-$environment.txt" "$GITHUB_WORKSPACE/tfplan-$environment.txt"
-          done
+          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
+            terraform validate
+            terraform plan -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan"
+            terraform show -no-color "tfplan" > "tfplan.txt"
+          else
+            sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+            terraform plan -destroy -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -out="tfplan"
+            terraform show -no-color "tfplan" > "tfplan.txt"
+          fi
 
-      - name: Upload Terraform Plans
+      - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-plans
+          name: terraform-plan
           path: |
-            ${{ github.workspace }}/tfplan-*
-            ${{ github.workspace }}/tfplan-*.txt
+            ${{ github.workspace }}/infra/terraform/tfplan
+            ${{ github.workspace }}/infra/terraform/tfplan.txt
           retention-days: 7
       
       - name: Upload SSH keys and DB password
@@ -226,268 +174,26 @@ jobs:
         with:
           terraform_version: 1.0.0
       
-      - name: Set environment
-        run: |
-          SELECTED_ENV="${{ github.event.inputs.environment }}"
-          if [[ "$SELECTED_ENV" == "main" ]]; then
-            echo "ENVIRONMENTS=production" >> $GITHUB_ENV
-          elif [[ "$SELECTED_ENV" == "all" ]]; then
-            echo "ENVIRONMENTS=development,staging,production" >> $GITHUB_ENV
-          else
-            echo "ENVIRONMENTS=$SELECTED_ENV" >> $GITHUB_ENV
-          fi
-      
-      - name: Download Terraform Plans
+      - name: Download Terraform Plan
         uses: actions/download-artifact@v4
         with:
-          name: terraform-plans
-          path: ${{ github.workspace }}
+          name: terraform-plan
+          path: ${{ github.workspace }}/infra/terraform
       
       - name: Execute Terraform Apply/Destroy
         run: |
-          ACTION="${{ github.event.inputs.action }}"
-          IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform apply -auto-approve tfplan
           
-          for environment in "${ENVS[@]}"; do
-            mkdir -p "$GITHUB_WORKSPACE/temp-apply-$environment"
-            cp -r $GITHUB_WORKSPACE/infra/terraform/* "$GITHUB_WORKSPACE/temp-apply-$environment/"
-            cp "$GITHUB_WORKSPACE/tfplan-$environment" "$GITHUB_WORKSPACE/temp-apply-$environment/"
-            cd "$GITHUB_WORKSPACE/temp-apply-$environment"
-            
-            sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
-            terraform init
-            
-            if [[ "$ACTION" == "deploy" ]]; then
-              echo "=== Application pour $environment ==="
-              terraform apply -auto-approve "tfplan-$environment"
-              terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-$environment.json"
-            else
-              echo "=== Destruction pour $environment ==="
-              terraform apply -auto-approve "tfplan-$environment"
-            fi
-          done
+          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
+            terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
+          fi
       
       - name: Upload Terraform Outputs
         if: github.event.inputs.action == 'deploy'
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
-          path: ${{ github.workspace }}/terraform-outputs-*.json
+          path: ${{ github.workspace }}/terraform-outputs.json
           retention-days: 7
-  
-  configure-servers:
-    needs: terraform-apply
-    if: github.event.inputs.action == 'deploy'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-      
-      - name: Download Terraform Outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}/infra/ansible
-      
-      - name: Download SSH keys
-        uses: actions/download-artifact@v4
-        with:
-          name: credentials
-          path: ${{ github.workspace }}/ssh-keys
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-      
-      - name: Install Ansible
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible boto3
-      
-      - name: Create Ansible inventory
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          # Utiliser le premier fichier terraform-outputs trouvé
-          OUTPUTS_FILE=$(ls terraform-outputs-*.json | head -1)
-          cat > inventory.ini << EOF
-          [github_runner]
-          $(jq -r '.github_runner_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          
-          [sonarqube]
-          $(jq -r '.sonarqube_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          
-          [monitoring]
-          $(jq -r '.monitoring_ip.value' $OUTPUTS_FILE) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          EOF
-          cat inventory.ini
-
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          cp $GITHUB_WORKSPACE/ssh-keys/id_rsa ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          echo "Clé publique utilisée:"
-          cat $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub
-          
-          echo "Attente de 60 secondes pour que les instances soient prêtes pour SSH..."
-          sleep 60
-
-      - name: Configure SSH on instances
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          # Utiliser le premier fichier terraform-outputs trouvé
-          OUTPUTS_FILE=$(ls terraform-outputs-*.json | head -1)
-          echo "Fichier utilisé: $OUTPUTS_FILE"
-          echo "Contenu du fichier:"
-          cat $OUTPUTS_FILE
-          
-          # Vérifier si le fichier est un JSON valide
-          if ! jq empty $OUTPUTS_FILE 2>/dev/null; then
-            echo "Erreur: Le fichier JSON est invalide"
-            exit 1
-          fi
-          
-          GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' $OUTPUTS_FILE)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' $OUTPUTS_FILE)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value' $OUTPUTS_FILE)
-          
-          echo "IPs extraites: Runner=$GITHUB_RUNNER_IP, SonarQube=$SONARQUBE_IP, Monitoring=$MONITORING_IP"
-          
-          for IP in $GITHUB_RUNNER_IP $SONARQUBE_IP $MONITORING_IP; do
-            if [[ "$IP" != "null" && -n "$IP" ]]; then
-              echo "Waiting for $IP to be accessible..."
-              timeout 300 bash -c "until nc -z $IP 22; do sleep 5; done" || echo "Timeout waiting for $IP"
-            else
-              echo "IP invalide ou manquante: $IP"
-            fi
-          done
-       
-      - name: Generate GitHub Runner token
-        id: get-runner-token
-        continue-on-error: true
-        run: |
-          TOKEN="${{ secrets.RUNNER_TOKEN }}"
-          if [ -z "$TOKEN" ]; then
-            echo "::warning::RUNNER_TOKEN secret is not set. Using a placeholder token."
-            echo "placeholder-token" > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
-          else
-            RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token $TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token)
-            
-            RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
-            if [ "$RUNNER_TOKEN" != "null" ] && [ -n "$RUNNER_TOKEN" ]; then
-              echo $RUNNER_TOKEN > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
-              echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
-            else
-              echo "::warning::Failed to get runner token. Using a placeholder token."
-              echo "placeholder-token" > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
-              echo "token=placeholder-token" >> $GITHUB_OUTPUT
-            fi
-          fi
-      
-      - name: Upload updated credentials
-        uses: actions/upload-artifact@v4
-        with:
-          name: credentials-updated
-          path: ${{ github.workspace }}/ssh-keys/
-          retention-days: 7
-      
-      - name: Run Ansible playbook
-        continue-on-error: true
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i inventory.ini playbook.yml \
-            -e "github_account=${{ github.repository_owner }} github_repo=${{ github.repository }} runner_token=${{ steps.get-runner-token.outputs.token }}" \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10' \
-            -vvv/infra/terraform/* "$GITHUB_WORKSPACE/temp-apply-$environment/"
-            cp "$GITHUB_WORKSPACE/tfplan-$environment" "$GITHUB_WORKSPACE/temp-apply-$environment/"
-            cd "$GITHUB_WORKSPACE/temp-apply-$environment"
-            
-            sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
-            terraform init
-            
-            if [[ "$ACTION" == "deploy" ]]; then
-              echo "=== Application pour $environment ==="
-              terraform apply -auto-approve "tfplan-$environment"
-              terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-$environment.json"
-            else
-              echo "=== Destruction pour $environment ==="
-              terraform apply -auto-approve "tfplan-$environment"
-            fi
-          donection pour $environment ==="
-              terraform apply -auto-approve "tfplan-$environment"
-            fi
-            
-            cd "../../terraform"
-          done
-      
-      - name: Upload Terraform Outputs
-        if: github.event.inputs.action == 'deploy'
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}/terraform-outputs-*.json
-          retention-days: 7
-  
-  generate-report:
-    needs: configure-servers
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Terraform Outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-outputs
-      
-      - name: Download credentials
-        uses: actions/download-artifact@v4
-        with:
-          name: credentials-updated
-          path: ./credentials
-      
-      - name: Generate deployment report
-        run: |
-          cat > deployment-report.md << EOF
-          # Rapport de déploiement
-          
-          ## Informations d'infrastructure
-          
-          - **GitHub Runner IP**: $(jq -r '.github_runner_ip.value' terraform-outputs.json)
-          - **SonarQube IP**: $(jq -r '.sonarqube_ip.value' terraform-outputs.json)
-          - **Monitoring IP**: $(jq -r '.monitoring_ip.value' terraform-outputs.json)
-          - **Base de données**: $(jq -r '.db_endpoint.value' terraform-outputs.json)
-          - **Cluster EKS**: $(jq -r '.eks_cluster_name.value' terraform-outputs.json)
-          
-          ## Accès
-          
-          Les informations d'accès ont été sauvegardées dans les artifacts de cette exécution:
-          
-          - Clé SSH privée
-          - Mot de passe de la base de données
-          - Token GitHub Runner
-          
-          ## Environnement déployé
-          
-          $(if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then echo "${{ github.event.inputs.environment }}"; elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then echo "production"; elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then echo "staging"; elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then echo "development"; else echo "development"; fi)
-          
-          ## Date de déploiement
-          
-          $(date)
-          EOF
-      
-      - name: Upload deployment report
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-report
-          path: ./deployment-report.md
-          retention-days: 30
