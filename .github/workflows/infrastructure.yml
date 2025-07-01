@@ -272,7 +272,7 @@ jobs:
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
   terraform-destroy:
-    needs: terraform-plan
+    needs: setup-backend-tf
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm_destroy == 'yes'
     steps:
