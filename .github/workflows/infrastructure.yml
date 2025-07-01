@@ -111,18 +111,18 @@ jobs:
       - name: Generate SSH key pair
         if: github.event.inputs.action == 'deploy'
         run: |
-          ssh-keygen -t rsa -b 4096 -f id_rsa -N ""
-          echo "TF_VAR_ssh_public_key=$(cat id_rsa.pub)" >> $GITHUB_ENV
-          mkdir -p ssh-keys
-          cp id_rsa ssh-keys/
-          cp id_rsa.pub ssh-keys/
+          ssh-keygen -t rsa -b 4096 -f $GITHUB_WORKSPACE/id_rsa -N ""
+          echo "TF_VAR_ssh_public_key=$(cat $GITHUB_WORKSPACE/id_rsa.pub)" >> $GITHUB_ENV
+          mkdir -p $GITHUB_WORKSPACE/ssh-keys
+          cp $GITHUB_WORKSPACE/id_rsa $GITHUB_WORKSPACE/ssh-keys/
+          cp $GITHUB_WORKSPACE/id_rsa.pub $GITHUB_WORKSPACE/ssh-keys/
       
       - name: Generate DB password
         if: github.event.inputs.action == 'deploy'
         run: |
           DB_PASSWORD=$(openssl rand -base64 16)
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
-          echo "$DB_PASSWORD" > ssh-keys/db_password.txt
+          echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/ssh-keys/db_password.txt
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -149,7 +149,6 @@ jobs:
           echo "Déploiement sur: $(echo $GITHUB_ENV | grep ENVIRONMENTS | cut -d'=' -f2)"
       
       - name: Terraform Plan
-        working-directory: ./infra/terraform
         run: |
           ACTION="${{ github.event.inputs.action }}"
           IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
@@ -157,9 +156,9 @@ jobs:
           for environment in "${ENVS[@]}"; do
             echo "=== Plan pour l'environnement: $environment ==="
             
-            mkdir -p "../temp-$environment"
-            cp -r * "../temp-$environment/"
-            cd "../temp-$environment"
+            mkdir -p "$GITHUB_WORKSPACE/temp-$environment"
+            cp -r $GITHUB_WORKSPACE/infra/terraform/* "$GITHUB_WORKSPACE/temp-$environment/"
+            cd "$GITHUB_WORKSPACE/temp-$environment"
             
             sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
             
@@ -172,15 +171,14 @@ jobs:
               terraform plan -destroy -var="environment=$environment" -out="tfplan-$environment"
             fi
             
-            cp "tfplan-$environment" "../../tfplan-$environment"
-            cd "../../terraform"
+            cp "tfplan-$environment" "$GITHUB_WORKSPACE/tfplan-$environment"
           done
 
       - name: Upload Terraform Plans
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plans
-          path: ./infra/tfplan-*
+          path: ${{ github.workspace }}/tfplan-*
           retention-days: 7
       
       - name: Upload SSH keys and DB password
@@ -188,7 +186,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: credentials
-          path: ./ssh-keys/
+          path: ${{ github.workspace }}/ssh-keys/
           retention-days: 7
 
   terraform-apply:
@@ -225,18 +223,18 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: terraform-plans
-          path: ./infra/terraform
+          path: ${{ github.workspace }}
       
       - name: Execute Terraform Apply/Destroy
-        working-directory: ./infra/terraform
         run: |
           ACTION="${{ github.event.inputs.action }}"
           IFS=',' read -ra ENVS <<< "${{ env.ENVIRONMENTS }}"
           
           for environment in "${ENVS[@]}"; do
-            mkdir -p "../temp-$environment"
-            cp -r * "../temp-$environment/"
-            cd "../temp-$environment"
+            mkdir -p "$GITHUB_WORKSPACE/temp-apply-$environment"
+            cp -r $GITHUB_WORKSPACE/infra/terraform/* "$GITHUB_WORKSPACE/temp-apply-$environment/"
+            cp "$GITHUB_WORKSPACE/tfplan-$environment" "$GITHUB_WORKSPACE/temp-apply-$environment/"
+            cd "$GITHUB_WORKSPACE/temp-apply-$environment"
             
             sed -i "s|key=\"env/|key=\"$environment/|g" backend.tf
             terraform init
@@ -244,9 +242,12 @@ jobs:
             if [[ "$ACTION" == "deploy" ]]; then
               echo "=== Application pour $environment ==="
               terraform apply -auto-approve "tfplan-$environment"
-              terraform output -json > "../../terraform-outputs-$environment.json"
+              terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-$environment.json"
             else
               echo "=== Destruction pour $environment ==="
+              terraform apply -auto-approve "tfplan-$environment"
+            fi
+          donection pour $environment ==="
               terraform apply -auto-approve "tfplan-$environment"
             fi
             
@@ -258,7 +259,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
-          path: ./infra/terraform-outputs-*.json
+          path: ${{ github.workspace }}/terraform-outputs-*.json
           retention-days: 7
   
   configure-servers:
@@ -279,13 +280,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: terraform-outputs
-          path: ./infra/ansible
+          path: ${{ github.workspace }}/infra/ansible
       
       - name: Download SSH keys
         uses: actions/download-artifact@v4
         with:
           name: credentials
-          path: ./ssh-keys
+          path: ${{ github.workspace }}/ssh-keys
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -298,8 +299,8 @@ jobs:
           pip install ansible boto3
       
       - name: Create Ansible inventory
-        working-directory: ./infra/ansible
         run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
           cat > inventory.ini << EOF
           [github_runner]
           $(jq -r '.github_runner_ip.value' terraform-outputs.json) ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
@@ -315,30 +316,24 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          cp ./ssh-keys/id_rsa ~/.ssh/id_rsa
+          cp $GITHUB_WORKSPACE/ssh-keys/id_rsa ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
           # Afficher la clé publique pour vérification
           echo "Clé publique utilisée:"
-          cat ./ssh-keys/id_rsa.pub
+          cat $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub
           
           # Attendre que les instances soient prêtes pour SSH (60 secondes)
           echo "Attente de 60 secondes pour que les instances soient prêtes pour SSH..."
           sleep 60
 
       - name: Configure SSH on instances
-        working-directory: ./infra/ansible
         run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
           # Extraire les adresses IP
           GITHUB_RUNNER_IP=$(jq -r '.github_runner_ip.value' terraform-outputs.json)
           SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' terraform-outputs.json)
           MONITORING_IP=$(jq -r '.monitoring_ip.value' terraform-outputs.json)
-          
-          # Récupérer la clé SSH utilisée pour le provisionnement Terraform
-          TF_SSH_KEY=$(cat ../terraform/terraform.tfstate | jq -r '.resources[] | select(.type == "aws_key_pair") | .instances[0].attributes.public_key')
-          
-          # Utiliser cette clé pour la connexion initiale
-          echo "$TF_SSH_KEY" > ~/.ssh/id_rsa.pub
           
           # Attendre que les instances soient accessibles
           for IP in $GITHUB_RUNNER_IP $SONARQUBE_IP $MONITORING_IP; do
@@ -354,7 +349,7 @@ jobs:
           TOKEN="${{ secrets.RUNNER_TOKEN }}"
           if [ -z "$TOKEN" ]; then
             echo "::warning::RUNNER_TOKEN secret is not set. Using a placeholder token."
-            echo "placeholder-token" > ./ssh-keys/github_runner_token.txt
+            echo "placeholder-token" > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
           else
             RESPONSE=$(curl -s -X POST \
               -H "Authorization: token $TOKEN" \
@@ -363,11 +358,11 @@ jobs:
             
             RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
             if [ "$RUNNER_TOKEN" != "null" ] && [ -n "$RUNNER_TOKEN" ]; then
-              echo $RUNNER_TOKEN > ./ssh-keys/github_runner_token.txt
+              echo $RUNNER_TOKEN > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
               echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
             else
               echo "::warning::Failed to get runner token. Using a placeholder token."
-              echo "placeholder-token" > ./ssh-keys/github_runner_token.txt
+              echo "placeholder-token" > $GITHUB_WORKSPACE/ssh-keys/github_runner_token.txt
               echo "token=placeholder-token" >> $GITHUB_OUTPUT
             fi
           fi
@@ -376,13 +371,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: credentials-updated
-          path: ./ssh-keys/
+          path: ${{ github.workspace }}/ssh-keys/
           retention-days: 7
       
       - name: Run Ansible playbook
-        working-directory: ./infra/ansible
         continue-on-error: true
         run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
           export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory.ini playbook.yml \
             -e "github_account=${{ github.repository_owner }} github_repo=${{ github.repository }} runner_token=${{ steps.get-runner-token.outputs.token }}" \
