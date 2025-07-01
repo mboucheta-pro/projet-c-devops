@@ -3,7 +3,7 @@
   hosts: github-runner
   become: true
   gather_facts: false
-  remote_user: ec2-user
+  remote_user: ubuntu
   vars:
     ansible_ssh_private_key_file: ~/.ssh/id_rsa
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
@@ -23,54 +23,54 @@
         enabled: true
       ignore_errors: true
       
-    - name: Ajouter l'utilisateur ec2-user au groupe docker
+    - name: Ajouter l'utilisateur ubuntu au groupe docker
       user:
-        name: ec2-user
+        name: ubuntu
         groups: docker
         append: true
       ignore_errors: true
       
     - name: Créer le répertoire pour le runner
       file:
-        path: /home/ec2-user/actions-runner
+        path: /home/ubuntu/actions-runner
         state: directory
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: '0755'
       ignore_errors: true
       
     - name: Télécharger le runner GitHub
       get_url:
         url: https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
-        dest: /home/ec2-user/actions-runner/actions-runner.tar.gz
+        dest: /home/ubuntu/actions-runner/actions-runner.tar.gz
         mode: '0644'
       ignore_errors: true
       
     - name: Extraire l'archive du runner
       unarchive:
-        src: /home/ec2-user/actions-runner/actions-runner.tar.gz
-        dest: /home/ec2-user/actions-runner
+        src: /home/ubuntu/actions-runner/actions-runner.tar.gz
+        dest: /home/ubuntu/actions-runner
         remote_src: true
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
       ignore_errors: true
       
     - name: Configurer le runner
       shell: |
-        cd /home/ec2-user/actions-runner
+        cd /home/ubuntu/actions-runner
         ./config.sh --url https://github.com/{{ github_repo }} --token {{ runner_token }} --name "EC2-Runner" --unattended
-      become_user: ec2-user
+      become_user: ubuntu
       ignore_errors: true
       
     - name: Installer le service du runner
       shell: |
-        cd /home/ec2-user/actions-runner
+        cd /home/ubuntu/actions-runner
         ./svc.sh install
       ignore_errors: true
       
     - name: Démarrer le service du runner
       shell: |
-        cd /home/ec2-user/actions-runner
+        cd /home/ubuntu/actions-runner
         ./svc.sh start
       ignore_errors: true
 
@@ -183,25 +183,25 @@
         enabled: true
       ignore_errors: true
       
-    - name: Ajouter l'utilisateur ec2-user au groupe docker
+    - name: Ajouter l'utilisateur ubuntu au groupe docker
       user:
-        name: ec2-user
+        name: ubuntu
         groups: docker
         append: true
       ignore_errors: true
       
     - name: Créer le répertoire pour Prometheus et Grafana
       file:
-        path: /home/ec2-user/monitoring
+        path: /home/ubuntu/monitoring
         state: directory
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: '0755'
       ignore_errors: true
       
     - name: Créer le fichier docker-compose.yml
       copy:
-        dest: /home/ec2-user/monitoring/docker-compose.yml
+        dest: /home/ubuntu/monitoring/docker-compose.yml
         content: |
           version: '3'
           services:
@@ -233,23 +233,23 @@
           volumes:
             prometheus_data:
             grafana_data:
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: '0644'
       ignore_errors: true
       
     - name: Créer le répertoire pour la configuration de Prometheus
       file:
-        path: /home/ec2-user/monitoring/prometheus
+        path: /home/ubuntu/monitoring/prometheus
         state: directory
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: '0755'
       ignore_errors: true
       
     - name: Créer le fichier de configuration Prometheus
       copy:
-        dest: /home/ec2-user/monitoring/prometheus/prometheus.yml
+        dest: /home/ubuntu/monitoring/prometheus/prometheus.yml
         content: |
           global:
             scrape_interval: 15s
@@ -258,14 +258,14 @@
             - job_name: 'prometheus'
               static_configs:
                 - targets: ['localhost:9090']
-        owner: ec2-user
-        group: ec2-user
+        owner: ubuntu
+        group: ubuntu
         mode: '0644'
       ignore_errors: true
       
     - name: Démarrer les conteneurs
       shell: |
-        cd /home/ec2-user/monitoring
+        cd /home/ubuntu/monitoring
         docker-compose up -d
-      become_user: ec2-user
+      become_user: ubuntu
       ignore_errors: true

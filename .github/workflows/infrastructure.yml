@@ -289,13 +289,13 @@ jobs:
           
           cat > inventory.ini << EOF
           [github-runner]
-          $GITHUB_RUNNER_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $GITHUB_RUNNER_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
           
           [sonarqube]
-          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
           
           [monitoring]
-          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
           EOF
       
       - name: Generate GitHub Runner token
@@ -323,7 +323,7 @@ jobs:
           echo "Test de connectivité SSH..."
           for ip in $(grep -E '^[0-9]' $GITHUB_WORKSPACE/infra/ansible/inventory.ini | awk '{print $1}'); do
             echo "Test connexion vers $ip"
-            timeout 10 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@$ip 'echo "SSH OK"' || echo "Échec connexion $ip"
+            timeout 10 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@$ip 'echo "SSH OK"' || echo "Échec connexion $ip"
           done
           
           echo "Attente de 30 secondes supplémentaires..."
