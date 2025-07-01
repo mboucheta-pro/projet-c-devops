@@ -5,15 +5,14 @@ provider "aws" {
 # Variables
 locals {
   tags = {
-    Project     = var.project
-    Environment = var.environment
-    ManagedBy   = "Terraform"
+    Project   = var.project
+    ManagedBy = "Terraform"
   }
 }
 
 # SSH Key
 resource "aws_key_pair" "deployer" {
-  key_name   = "${var.project}-${var.environment}-key"
+  key_name   = "${var.project}-key"
   public_key = var.ssh_public_key
 
   lifecycle {
