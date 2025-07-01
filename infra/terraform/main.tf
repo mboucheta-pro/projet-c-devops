@@ -10,14 +10,9 @@ locals {
   }
 }
 
-# SSH Key
-resource "aws_key_pair" "deployer" {
-  key_name   = "${var.project}-key"
-  public_key = var.ssh_public_key
-
-  lifecycle {
-    ignore_changes = [public_key]
-  }
+# Utiliser la key-pair AWS existante
+data "aws_key_pair" "deployer" {
+  key_name = "projet-c"
 }
 
 # VPC et réseau
@@ -112,30 +107,19 @@ resource "aws_instance" "github-runner" {
   instance_type = "t3a.small" # Bon équilibre coût/performance
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.deployer.key_name
   
   root_block_device {
     volume_size = 20
     volume_type = "gp3"
   }
   
-  # Script de démarrage pour configurer l'accès SSH
-  user_data = <<-EOF
-    #!/bin/bash
-    mkdir -p /home/ec2-user/.ssh
-    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
-    chmod 700 /home/ec2-user/.ssh
-    chmod 600 /home/ec2-user/.ssh/authorized_keys
-    chown -R ec2-user:ec2-user /home/ec2-user/.ssh
-    systemctl restart sshd
-  EOF
-
   tags = merge(local.tags, {
     Name = "${var.project}-github-runner"
   })
 
   lifecycle {
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami]
   }
 }
 
@@ -147,28 +131,19 @@ resource "aws_instance" "sonarqube" {
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.deployer.key_name
   
   root_block_device {
     volume_size = 30
     volume_type = "gp3"
   }
   
-  # Script de démarrage pour configurer l'accès SSH
-  user_data = <<-EOF
-    #!/bin/bash
-    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
-    chmod 600 /home/ec2-user/.ssh/authorized_keys
-    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
-    systemctl restart sshd
-  EOF
-
   tags = merge(local.tags, {
     Name = "${var.project}-sonarqube"
   })
 
   lifecycle {
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami]
   }
 }
 
@@ -180,28 +155,19 @@ resource "aws_instance" "monitoring" {
   instance_type = "t3a.small"
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
-  key_name      = aws_key_pair.deployer.key_name
+  key_name      = data.aws_key_pair.deployer.key_name
   
   root_block_device {
     volume_size = 20
     volume_type = "gp3"
   }
   
-  # Script de démarrage pour configurer l'accès SSH
-  user_data = <<-EOF
-    #!/bin/bash
-    echo "${var.ssh_public_key}" >> /home/ec2-user/.ssh/authorized_keys
-    chmod 600 /home/ec2-user/.ssh/authorized_keys
-    chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
-    systemctl restart sshd
-  EOF
-
   tags = merge(local.tags, {
     Name = "${var.project}-monitoring"
   })
 
   lifecycle {
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami]
   }
 }
 

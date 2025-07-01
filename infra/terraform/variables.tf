@@ -29,11 +29,6 @@ variable "db_password" {
   sensitive   = true
 }
 
-variable "ssh_public_key" {
-  description = "Clé SSH publique pour les instances EC2"
-  type        = string
-}
-
 variable "instances_running" {
   description = "Contrôle si les instances EC2 doivent être en cours d'exécution"
   type        = bool

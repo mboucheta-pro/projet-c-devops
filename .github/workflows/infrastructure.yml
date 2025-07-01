@@ -108,24 +108,12 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
-      - name: Generate SSH key pair
-        run: |
-          ssh-keygen -t rsa -b 4096 -f $GITHUB_WORKSPACE/id_rsa -N ""
-          echo "TF_VAR_ssh_public_key=$(cat $GITHUB_WORKSPACE/id_rsa.pub)" >> $GITHUB_ENV
-          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
-            mkdir -p $GITHUB_WORKSPACE/ssh-keys
-            cp $GITHUB_WORKSPACE/id_rsa $GITHUB_WORKSPACE/ssh-keys/
-            cp $GITHUB_WORKSPACE/id_rsa.pub $GITHUB_WORKSPACE/ssh-keys/
-          fi
-      
       - name: Generate DB password
         run: |
           DB_PASSWORD=$(openssl rand -hex 16 | tr -d '/@" ')
           echo "TF_VAR_db_password=$DB_PASSWORD" >> $GITHUB_ENV
-          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
-            mkdir -p $GITHUB_WORKSPACE/ssh-keys
-            echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/ssh-keys/db_password.txt
-          fi
+          mkdir -p $GITHUB_WORKSPACE/credentials
+          echo "$DB_PASSWORD" > $GITHUB_WORKSPACE/credentials/db_password.txt
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -139,15 +127,9 @@ jobs:
           
           INSTANCES_RUNNING=$([[ "${{ github.event.inputs.instances_state }}" == "running" ]] && echo "true" || echo "false")
           
-          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
-            terraform validate
-            terraform plan -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
-            terraform show -no-color "tfplan" > "tfplan.txt"
-          else
-            sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-            terraform plan -destroy -var="db_password=$TF_VAR_db_password" -var="ssh_public_key=$TF_VAR_ssh_public_key" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
-            terraform show -no-color "tfplan" > "tfplan.txt"
-          fi
+          terraform validate
+          terraform plan -var="db_password=$TF_VAR_db_password" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
+          terraform show -no-color "tfplan" > "tfplan.txt"
 
       - name: Upload Terraform Plan to S3
         run: |
@@ -164,18 +146,9 @@ jobs:
             ${{ github.workspace }}/infra/terraform/tfplan.txt
           retention-days: 7
       
-      - name: Upload SSH keys to S3
-        if: github.event.inputs.action == 'deploy'
+      - name: Upload DB password to S3
         run: |
-          aws s3 cp $GITHUB_WORKSPACE/ssh-keys/ s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ --recursive
-      
-      - name: Upload SSH keys and DB password
-        if: github.event.inputs.action == 'deploy'
-        uses: actions/upload-artifact@v4
-        with:
-          name: credentials
-          path: ${{ github.workspace }}/ssh-keys/
-          retention-days: 7
+          aws s3 cp $GITHUB_WORKSPACE/credentials/db_password.txt s3://${{ env.TF_BACKEND_BUCKET }}/credentials/db_password.txt
 
   terraform-apply:
     needs: terraform-plan
@@ -191,18 +164,10 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
-      - name: Download SSH keys from S3
+      - name: Download DB password from S3
         run: |
-          mkdir -p $GITHUB_WORKSPACE/ssh-keys
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ $GITHUB_WORKSPACE/ssh-keys/ --recursive
-          
-          echo "Clés téléchargées depuis S3:"
-          ls -la $GITHUB_WORKSPACE/ssh-keys/
-          echo "Clé publique:"
-          cat $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub
-          
-          echo "TF_VAR_ssh_public_key=$(cat $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub)" >> $GITHUB_ENV
-          echo "TF_VAR_db_password=$(cat $GITHUB_WORKSPACE/ssh-keys/db_password.txt)" >> $GITHUB_ENV
+          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/db_password.txt $GITHUB_WORKSPACE/db_password.txt
+          echo "TF_VAR_db_password=$(cat $GITHUB_WORKSPACE/db_password.txt)" >> $GITHUB_ENV
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -235,6 +200,72 @@ jobs:
           path: ${{ github.workspace }}/terraform-outputs.json
           retention-days: 7
 
+  configure-instances:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy' && github.event.inputs.instances_state == 'running'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Terraform Outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install Ansible
+        run: pip install ansible
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/projet-c.pem
+          chmod 600 ~/.ssh/projet-c.pem
+      
+      - name: Create Ansible inventory
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          
+          GITHUB_RUNNER_IP=$(jq -r '."github-runner_ip".value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          
+          cat > inventory.ini << EOF
+          [github-runner]
+          $GITHUB_RUNNER_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          
+          [sonarqube]
+          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          
+          [monitoring]
+          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          EOF
+      
+      - name: Generate GitHub Runner token
+        id: runner-token
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token)
+          
+          RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
+          echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
+      
+      - name: Run Ansible playbook
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory.ini playbook.yml \
+            -e "github_repo=${{ github.repository }}" \
+            -e "runner_token=${{ steps.runner-token.outputs.token }}" \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
   terraform-destroy:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
@@ -259,110 +290,4 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-          terraform destroy -auto-approve -var="db_password=dummy" -var="ssh_public_key=dummy" -var="instances_running=false"
-
-  configure-instances:
-    needs: terraform-apply
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy' && github.event.inputs.instances_state == 'running'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download Terraform Outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}
-      
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-      
-      - name: Download SSH keys from S3
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/ssh-keys
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/credentials/ $GITHUB_WORKSPACE/ssh-keys/ --recursive
-          
-          echo "Clés SSH téléchargées:"
-          ls -la $GITHUB_WORKSPACE/ssh-keys/
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-      
-      - name: Install Ansible
-        run: pip install ansible
-      
-      - name: Create Ansible inventory
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          
-          echo "Contenu du fichier terraform-outputs.json:"
-          cat $GITHUB_WORKSPACE/terraform-outputs.json
-          
-          GITHUB_RUNNER_IP=$(jq -r '."github-runner_ip".value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
-          
-          if [[ -z "$GITHUB_RUNNER_IP" || -z "$SONARQUBE_IP" || -z "$MONITORING_IP" ]]; then
-            echo "Erreur: Une ou plusieurs IPs sont manquantes"
-            echo "GitHub Runner IP: $GITHUB_RUNNER_IP"
-            echo "SonarQube IP: $SONARQUBE_IP"
-            echo "Monitoring IP: $MONITORING_IP"
-            exit 1
-          fi
-          
-          cat > inventory.ini << EOF
-          [github-runner]
-          $GITHUB_RUNNER_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          
-          [sonarqube]
-          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          
-          [monitoring]
-          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
-          EOF
-      
-      - name: Generate GitHub Runner token
-        id: runner-token
-        run: |
-          RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token)
-          
-          RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
-          echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
-      
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          cp $GITHUB_WORKSPACE/ssh-keys/id_rsa ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          echo "Clé SSH configurée:"
-          ls -la ~/.ssh/
-          echo "Empreinte de la clé publique:"
-          ssh-keygen -lf $GITHUB_WORKSPACE/ssh-keys/id_rsa.pub
-          
-          echo "Test de connectivité SSH..."
-          for ip in $(grep -E '^[0-9]' $GITHUB_WORKSPACE/infra/ansible/inventory.ini | awk '{print $1}'); do
-            echo "Test connexion vers $ip"
-            timeout 10 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ec2-user@$ip 'echo "SSH OK"' || echo "Échec connexion $ip"
-          done
-          
-          echo "Attente de 30 secondes supplémentaires..."
-          sleep 30
-      
-      - name: Run Ansible playbook
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i inventory.ini playbook.yml -vvvv \
-            -e "github_repo=${{ github.repository }}" \
-            -e "runner_token=${{ steps.runner-token.outputs.token }}" \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+          terraform destroy -auto-approve -var="db_password=dummy" -var="instances_running=false"
