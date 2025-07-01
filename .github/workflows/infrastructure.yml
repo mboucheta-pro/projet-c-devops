@@ -12,7 +12,7 @@ on:
           - deploy
           - destroy
       environment:
-        description: 'Environnement de déploiement'
+        description: 'Environnement cible'
         required: true
         default: 'development'
         type: choice
