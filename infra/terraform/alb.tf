@@ -11,38 +11,6 @@ resource "aws_lb" "devops" {
   })
 }
 
-# Security Group pour ALB
-resource "aws_security_group" "alb" {
-  name        = "${var.project}-devops-alb-sg"
-  description = "Security group for DevOps Infrastructure Load Balancer"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.tags, {
-    Purpose = "DevOps-Infrastructure"
-  })
-}
-
 # Target Groups
 resource "aws_lb_target_group" "jenkins" {
   name     = "${var.project}-jenkins-tg"
