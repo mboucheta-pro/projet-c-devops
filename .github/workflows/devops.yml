@@ -33,7 +33,7 @@ jobs:
           terraform init
           terraform apply -auto-approve
   
-  terraform-plan:
+  terraform-deploy:
     needs: setup-backend
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
@@ -44,46 +44,108 @@ jobs:
         with:
           aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
-      - name: Terraform Plan
+      - name: Import, Plan and Apply Terraform
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
+          # Import all existing resources
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          # VPC resources
+          terraform import aws_vpc.projet-c $(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=projet-c-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_subnet.public[0] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-public-1" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_subnet.public[1] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-public-2" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_subnet.private[0] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-private-1" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_subnet.private[1] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-private-2" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_internet_gateway.main $(aws ec2 describe-internet-gateways --filters "Name=tag:Name,Values=projet-c-igw" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_nat_gateway.main $(aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=projet-c-nat" --query 'NatGateways[0].NatGatewayId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_eip.nat $(aws ec2 describe-addresses --filters "Name=tag:Name,Values=projet-c-nat-eip" --query 'Addresses[0].AllocationId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_route_table.public $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-public-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_route_table.private $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-private-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # Security Groups
+          terraform import aws_security_group.alb $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-alb-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_security_group.instances $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-instances-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_security_group.db $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-db-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # ALB resources
+          terraform import aws_lb.devops $(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.jenkins $(aws elbv2 describe-target-groups --names "projet-c-jenkins-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.sonarqube $(aws elbv2 describe-target-groups --names "projet-c-sonarqube-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.monitoring $(aws elbv2 describe-target-groups --names "projet-c-monitoring-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # EC2 instances
+          terraform import 'aws_instance.jenkins[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-jenkins" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import 'aws_instance.sonarqube[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-sonarqube" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import 'aws_instance.monitoring[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-monitoring" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # RDS resources
+          terraform import aws_db_subnet_group.default projet-c-db-subnet-group 2>/dev/null || true
+          terraform import aws_db_instance.database projet-c-db 2>/dev/null || true
+          
+          # Secrets Manager
+          terraform import aws_secretsmanager_secret.jenkins_admin projet-c/jenkins/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.sonarqube_admin projet-c/sonarqube/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.db_credentials projet-c/rds/credentials 2>/dev/null || true
+          
+          # EKS cluster
+          terraform import 'module.eks.aws_eks_cluster.this[0]' projet-c-eks 2>/dev/null || true
+          
+          # Set instance state
           if [[ "${{ github.event.inputs.action }}" == "deploy" || "${{ github.event.inputs.action }}" == "sortie-de-veille" ]]; then
             INSTANCES_RUNNING="true"
           else
             INSTANCES_RUNNING="false"
           fi
           
+          # Plan and Apply
           terraform validate
           terraform plan -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
-          terraform show -no-color "tfplan" > "tfplan.txt"
-
-      - name: Upload Terraform Plan to S3
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          aws s3 cp tfplan s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan
-          
-  terraform-apply:
-    needs: terraform-plan
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-terraform
-        with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-            
-      - name: Download Terraform Plan from S3
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan || echo "Plan not found, will generate new plan"
+          terraform apply -auto-approve tfplan
+          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
+          grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
       
-      - name: Execute Terraform Apply
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          terraform init
+      - name: Upload Terraform Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}/terraform-outputs.json
+          retention-days: 7ame,Values=projet-c-private-1" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_subnet.private[1] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-private-2" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_internet_gateway.main $(aws ec2 describe-internet-gateways --filters "Name=tag:Name,Values=projet-c-igw" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_nat_gateway.main $(aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=projet-c-nat" --query 'NatGateways[0].NatGatewayId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_eip.nat $(aws ec2 describe-addresses --filters "Name=tag:Name,Values=projet-c-nat-eip" --query 'Addresses[0].AllocationId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_route_table.public $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-public-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_route_table.private $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-private-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # Security Groups
+          terraform import aws_security_group.alb $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-alb-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_security_group.instances $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-instances-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_security_group.db $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-db-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # ALB resources
+          terraform import aws_lb.devops $(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.jenkins $(aws elbv2 describe-target-groups --names "projet-c-jenkins-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.sonarqube $(aws elbv2 describe-target-groups --names "projet-c-sonarqube-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import aws_lb_target_group.monitoring $(aws elbv2 describe-target-groups --names "projet-c-monitoring-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # EC2 instances
+          terraform import 'aws_instance.jenkins[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-jenkins" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import 'aws_instance.sonarqube[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-sonarqube" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          terraform import 'aws_instance.monitoring[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-monitoring" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
+          
+          # RDS resources
+          terraform import aws_db_subnet_group.default projet-c-db-subnet-group 2>/dev/null || true
+          terraform import aws_db_instance.database projet-c-db 2>/dev/null || true
+          
+          # Secrets Manager
+          terraform import aws_secretsmanager_secret.jenkins_admin projet-c/jenkins/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.sonarqube_admin projet-c/sonarqube/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.db_credentials projet-c/rds/credentials 2>/dev/null || true
+          
+          # EKS cluster
+          terraform import 'module.eks.aws_eks_cluster.this[0]' projet-c-eks 2>/dev/null || true
           
           # Generate plan if not available
           if [[ ! -f "tfplan" ]]; then
@@ -134,7 +196,7 @@ jobs:
           terraform destroy -auto-approve
 
   configure-instances:
-    needs: terraform-apply
+    needs: terraform-deploy
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'sortie-de-veille'
     steps:
