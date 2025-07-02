@@ -1,6 +1,6 @@
 # Bastion Host
 resource "aws_instance" "bastion" {
-  ami                    = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
+  ami                    = "ami-0c0a551d0459e9d39" # Amazon Linux 2023 pour ca-central-1
   instance_type          = "t3a.nano" # Taille minimale pour un bastion
   subnet_id              = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.bastion.id]
