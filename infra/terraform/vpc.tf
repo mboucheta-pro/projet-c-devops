@@ -1,5 +1,5 @@
 # VPC et réseau
-resource "aws_vpc" "main" {
+resource "aws_vpc" "projet-c" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
@@ -12,7 +12,7 @@ resource "aws_vpc" "main" {
 # Sous-réseaux publics
 resource "aws_subnet" "public" {
   count                   = 2
-  vpc_id                  = aws_vpc.main.id
+  vpc_id                  = aws_vpc.projet-c.id
   cidr_block              = "10.0.${count.index + 101}.0/24"
   availability_zone       = "${var.region}${count.index == 0 ? "a" : "b"}"
   map_public_ip_on_launch = true
@@ -25,7 +25,7 @@ resource "aws_subnet" "public" {
 # Sous-réseaux privés
 resource "aws_subnet" "private" {
   count             = 2
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = aws_vpc.projet-c.id
   cidr_block        = "10.0.${count.index + 1}.0/24"
   availability_zone = "${var.region}${count.index == 0 ? "a" : "b"}"
 
@@ -36,7 +36,7 @@ resource "aws_subnet" "private" {
 
 # Internet Gateway
 resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.projet-c.id
 
   tags = merge(local.tags, {
     Name = "${var.project}-igw"
@@ -64,7 +64,7 @@ resource "aws_nat_gateway" "main" {
 
 # Route table pour les sous-réseaux publics
 resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.projet-c.id
 
   route {
     cidr_block = "0.0.0.0/0"
@@ -78,7 +78,7 @@ resource "aws_route_table" "public" {
 
 # Route table pour les sous-réseaux privés
 resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.projet-c.id
 
   route {
     cidr_block     = "0.0.0.0/0"
