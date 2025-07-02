@@ -30,46 +30,18 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
           rm aws-credentials.json
       
-      - name: Check if backend resources exist
-        id: check-backend
-        run: |
-          BUCKET_EXISTS=false
-          TABLE_EXISTS=false
-          
-          if aws s3api head-bucket --bucket ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null; then
-            BUCKET_EXISTS=true
-          fi
-          
-          if aws dynamodb describe-table --table-name projet-c-terraform-locks 2>/dev/null; then
-            TABLE_EXISTS=true
-          fi
-          
-          if [[ "$BUCKET_EXISTS" == "true" && "$TABLE_EXISTS" == "true" ]]; then
-            echo "backend_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "backend_exists=false" >> $GITHUB_OUTPUT
-          fi
+
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.0.0
       
-      - name: Create or Import Backend Resources
+      - name: Create Backend Resources
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform-backend
           terraform init
-          
-          # Import all existing backend resources
-          terraform import aws_s3_bucket.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
-          terraform import aws_s3_bucket_versioning.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
-          terraform import aws_s3_bucket_server_side_encryption_configuration.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
-          terraform import aws_s3_bucket_public_access_block.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
-          terraform import aws_dynamodb_table.terraform_locks projet-c-terraform-locks 2>/dev/null || true
-          
-          # Apply configuration
-          terraform plan -out=backend-plan
-          terraform apply -auto-approve backend-plan
+          terraform apply -auto-approve
   
   terraform-plan:
     needs: setup-backend
