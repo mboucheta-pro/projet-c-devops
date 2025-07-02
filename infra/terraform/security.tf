@@ -74,22 +74,3 @@ resource "aws_security_group_rule" "instances_to_eks" {
   security_group_id        = module.eks.cluster_security_group_id
 }
 
-# Règles pour autoriser le bastion à accéder au cluster EKS
-resource "aws_security_group_rule" "bastion_to_eks" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.bastion.id
-  security_group_id        = module.eks.cluster_security_group_id
-}
-
-# Règles pour autoriser le bastion à accéder aux nœuds EKS
-resource "aws_security_group_rule" "bastion_to_eks_nodes" {
-  type                     = "ingress"
-  from_port                = 22
-  to_port                  = 22
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.bastion.id
-  security_group_id        = module.eks.node_security_group_id
-}
