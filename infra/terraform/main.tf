@@ -110,7 +110,7 @@ resource "aws_security_group" "instances" {
 resource "aws_instance" "jenkins" {
   count = var.instances_running ? 1 : 0
   
-  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
+  ami           = "ami-0a7154091c5c6623e" # Ubuntu 22.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # Jenkins nécessite plus de ressources
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
@@ -134,7 +134,7 @@ resource "aws_instance" "jenkins" {
 resource "aws_instance" "sonarqube" {
   count = var.instances_running ? 1 : 0
   
-  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
+  ami           = "ami-0a7154091c5c6623e" # Ubuntu 22.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
@@ -158,7 +158,7 @@ resource "aws_instance" "sonarqube" {
 resource "aws_instance" "monitoring" {
   count = var.instances_running ? 1 : 0
   
-  ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
+  ami           = "ami-0a7154091c5c6623e" # Ubuntu 22.04 LTS pour ca-central-1
   instance_type = "t3a.small"
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]

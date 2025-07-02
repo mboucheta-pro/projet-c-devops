@@ -225,13 +225,13 @@ jobs:
           
           cat > inventory.ini << EOF
           [jenkins]
-          $JENKINS_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $JENKINS_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [sonarqube]
-          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [monitoring]
-          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           EOF
       
       - name: Run Ansible playbook
