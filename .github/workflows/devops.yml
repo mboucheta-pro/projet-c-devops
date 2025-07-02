@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - uses: ./.github/actions/setup-terraform
+      - uses: .github/actions/setup-terraform
       
       - name: Check and Create Backend Resources
         run: |
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-terraform
+      - uses: .github/actions/setup-terraform
       
       - name: Terraform Plan
         run: |
@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-terraform
+      - uses: .github/actions/setup-terraform
             
       - name: Download Terraform Plan from S3
         run: |
@@ -110,8 +110,8 @@ jobs:
     if: github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: ./.github/actions/setup-terraform
+
+      - uses: .github/actions/setup-terraform
             
       - name: Execute Terraform Destroy
         run: |
