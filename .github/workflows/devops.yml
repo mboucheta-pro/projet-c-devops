@@ -23,19 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-      
-
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
+      - uses: ./.github/actions/setup-terraform
       
       - name: Check and Create Backend Resources
         run: |
@@ -49,6 +37,8 @@ jobs:
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
       
       - name: Terraform Plan
         run: |
@@ -76,6 +66,8 @@ jobs:
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
             
       - name: Download Terraform Plan from S3
         run: |
@@ -118,6 +110,8 @@ jobs:
     if: github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
+      
+      - uses: ./.github/actions/setup-terraform
             
       - name: Execute Terraform Destroy
         run: |

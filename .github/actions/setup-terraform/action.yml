@@ -1,0 +1,18 @@
+name: 'Setup Terraform & AWS'
+description: 'Configure AWS credentials and install Terraform'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Decode AWS credentials
+      shell: bash
+      run: |
+        echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+        echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
+        echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
+        rm aws-credentials.json
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.0.0
