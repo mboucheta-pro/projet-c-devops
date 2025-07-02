@@ -43,53 +43,41 @@ resource "aws_security_group" "instances" {
   description = "Security group for EC2 instances"
   vpc_id      = module.vpc.vpc_id
 
+  # SSH depuis le VPC uniquement
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # À restreindre en production
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Trafic depuis l'ALB
+  ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 9000
+    to_port         = 9000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 9000
-    to_port     = 9000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 9090
-    to_port     = 9090
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 9090
+    to_port         = 9090
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   egress {
@@ -112,7 +100,7 @@ resource "aws_instance" "jenkins" {
   
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # Jenkins nécessite plus de ressources
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = module.vpc.private_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = data.aws_key_pair.projet-c.key_name
   
@@ -136,7 +124,7 @@ resource "aws_instance" "sonarqube" {
   
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = module.vpc.private_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = data.aws_key_pair.projet-c.key_name
   
@@ -160,7 +148,7 @@ resource "aws_instance" "monitoring" {
   
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.small"
-  subnet_id     = module.vpc.public_subnets[0]
+  subnet_id     = module.vpc.private_subnets[1]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = data.aws_key_pair.projet-c.key_name
   
@@ -224,15 +212,51 @@ resource "aws_security_group" "db" {
   }
 }
 
-# Secret pour le mot de passe DB
-resource "aws_secretsmanager_secret" "db_password" {
-  name = "${var.project}/db/password"
+# Secrets pour Jenkins
+resource "aws_secretsmanager_secret" "jenkins_admin" {
+  name = "${var.project}/jenkins/admin"
+  description = "Credentials admin pour Jenkins"
   tags = local.tags
 }
 
-resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id     = aws_secretsmanager_secret.db_password.id
-  secret_string = var.db_password
+resource "aws_secretsmanager_secret_version" "jenkins_admin" {
+  secret_id = aws_secretsmanager_secret.jenkins_admin.id
+  secret_string = jsonencode({
+    username = "admin"
+    password = random_password.jenkins_admin.result
+  })
+}
+
+resource "random_password" "jenkins_admin" {
+  length  = 16
+  special = true
+}
+
+# Secrets pour SonarQube
+resource "aws_secretsmanager_secret" "sonarqube_admin" {
+  name = "${var.project}/sonarqube/admin"
+  description = "Credentials admin pour SonarQube"
+  tags = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "sonarqube_admin" {
+  secret_id = aws_secretsmanager_secret.sonarqube_admin.id
+  secret_string = jsonencode({
+    username = "admin"
+    password = random_password.sonarqube_admin.result
+  })
+}
+
+resource "random_password" "sonarqube_admin" {
+  length  = 16
+  special = true
+}
+
+# Secret géré par AWS pour les credentials RDS
+resource "aws_secretsmanager_secret" "db_credentials" {
+  name = "${var.project}/rds/credentials"
+  description = "Credentials pour la base de données RDS"
+  tags = local.tags
 }
 
 resource "aws_db_instance" "database" {
@@ -240,21 +264,24 @@ resource "aws_db_instance" "database" {
   storage_type           = "gp3"
   engine                 = "mysql"
   engine_version         = "8.0"
-  instance_class         = "db.t3.small" # Économique pour dev/test
+  instance_class         = "db.t3.small"
   identifier             = "${var.project}-db"
   db_name                = "appdb"
-  username               = var.db_username
-  password               = var.db_password
+  
+  # Gestion automatique des credentials par AWS Secrets Manager
+  manage_master_user_password = true
+  master_user_secret_kms_key_id = aws_secretsmanager_secret.db_credentials.kms_key_id
+  username = var.db_username
+  
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.db.id]
   skip_final_snapshot    = true
-  multi_az               = false # Économie de coûts en dev
-  publicly_accessible    = true  # Pour faciliter l'initialisation depuis le pipeline
+  multi_az               = false
+  publicly_accessible    = true
 
   tags = local.tags
 
   lifecycle {
-    ignore_changes = [password]
     prevent_destroy = true
   }
 }

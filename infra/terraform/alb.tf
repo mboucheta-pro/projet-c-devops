@@ -1,126 +1,164 @@
-# Application Load Balancer.
-resource "aws_lb" "main" {
-  name               = "${var.project}-alb"
+# DevOps Infrastructure Load Balancer
+resource "aws_lb" "devops" {
+  name               = "${var.project}-devops-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = module.vpc.public_subnets
 
-  enable_deletion_protection = false
+  tags = merge(local.tags, {
+    Purpose = "DevOps-Infrastructure"
+  })
+}
+
+# Security Group pour ALB
+resource "aws_security_group" "alb" {
+  name        = "${var.project}-devops-alb-sg"
+  description = "Security group for DevOps Infrastructure Load Balancer"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   tags = merge(local.tags, {
-    Name = "${var.project}-alb"
+    Purpose = "DevOps-Infrastructure"
   })
-
-  depends_on = [aws_security_group.alb]
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
-# Listener HTTP qui redirige vers HTTPS
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "OK"
-      status_code  = "200"
-    }
-  }
-
-  tags = local.tags
-}
-
-# Target group pour le frontend
-resource "aws_lb_target_group" "frontend" {
-  name     = "${var.project}-frontend-tg"
-  port     = 80
+# Target Groups
+resource "aws_lb_target_group" "jenkins" {
+  name     = "${var.project}-jenkins-tg"
+  port     = 8080
   protocol = "HTTP"
   vpc_id   = module.vpc.vpc_id
 
   health_check {
     enabled             = true
-    interval            = 30
-    path                = "/"
-    port                = "traffic-port"
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
     timeout             = 5
+    interval            = 30
+    path                = "/login"
     matcher             = "200"
   }
 
-  tags = local.tags
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  tags = merge(local.tags, {
+    Purpose = "DevOps-Infrastructure"
+  })
 }
 
-# Target group pour le backend
-resource "aws_lb_target_group" "backend" {
-  name     = "${var.project}-backend-tg"
+resource "aws_lb_target_group" "sonarqube" {
+  name     = "${var.project}-sonarqube-tg"
+  port     = 9000
+  protocol = "HTTP"
+  vpc_id   = module.vpc.vpc_id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    path                = "/"
+    matcher             = "200"
+  }
+
+  tags = merge(local.tags, {
+    Purpose = "DevOps-Infrastructure"
+  })
+}
+
+resource "aws_lb_target_group" "monitoring" {
+  name     = "${var.project}-monitoring-tg"
   port     = 3000
   protocol = "HTTP"
   vpc_id   = module.vpc.vpc_id
 
   health_check {
     enabled             = true
-    interval            = 30
-    path                = "/"
-    port                = "traffic-port"
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
     timeout             = 5
+    interval            = 30
+    path                = "/api/health"
     matcher             = "200"
   }
 
-  tags = local.tags
+  tags = merge(local.tags, {
+    Purpose = "DevOps-Infrastructure"
+  })
+}
 
-  lifecycle {
-    create_before_destroy = true
+# Target Group Attachments
+resource "aws_lb_target_group_attachment" "jenkins" {
+  count            = var.instances_running ? 1 : 0
+  target_group_arn = aws_lb_target_group.jenkins.arn
+  target_id        = aws_instance.jenkins[0].id
+  port             = 8080
+}
+
+resource "aws_lb_target_group_attachment" "sonarqube" {
+  count            = var.instances_running ? 1 : 0
+  target_group_arn = aws_lb_target_group.sonarqube.arn
+  target_id        = aws_instance.sonarqube[0].id
+  port             = 9000
+}
+
+resource "aws_lb_target_group_attachment" "monitoring" {
+  count            = var.instances_running ? 1 : 0
+  target_group_arn = aws_lb_target_group.monitoring.arn
+  target_id        = aws_instance.monitoring[0].id
+  port             = 3000
+}
+
+# Listeners
+resource "aws_lb_listener" "jenkins" {
+  load_balancer_arn = aws_lb.devops.arn
+  port              = "8080"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.jenkins.arn
   }
 }
 
-# Règle pour le frontend
-resource "aws_lb_listener_rule" "frontend" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
+resource "aws_lb_listener" "sonarqube" {
+  load_balancer_arn = aws_lb.devops.arn
+  port              = "9000"
+  protocol          = "HTTP"
 
-  action {
+  default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.sonarqube.arn
   }
-
-  condition {
-    path_pattern {
-      values = ["/"]
-    }
-  }
-
-  tags = local.tags
 }
 
-# Règle pour le backend
-resource "aws_lb_listener_rule" "backend" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 90
+resource "aws_lb_listener" "monitoring" {
+  load_balancer_arn = aws_lb.devops.arn
+  port              = "3000"
+  protocol          = "HTTP"
 
-  action {
+  default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.monitoring.arn
   }
-
-  condition {
-    path_pattern {
-      values = ["/api/*"]
-    }
-  }
-
-  tags = local.tags
 }

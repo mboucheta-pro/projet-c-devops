@@ -23,12 +23,6 @@ variable "db_username" {
   sensitive   = true
 }
 
-variable "db_password" {
-  description = "Mot de passe pour la base de données"
-  type        = string
-  sensitive   = true
-}
-
 variable "instances_running" {
   description = "Contrôle si les instances EC2 doivent être en cours d'exécution"
   type        = bool
