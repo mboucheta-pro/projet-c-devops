@@ -99,7 +99,7 @@ jobs:
           retention-days: 7
     
   terraform-apply:
-    needs: terraform-plan
+    needs: setup-backend
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille' || github.event.inputs.action == 'destroy'
     steps:
@@ -121,7 +121,7 @@ jobs:
         if: github.event.inputs.action != 'destroy'
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
-          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan
+          aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan || echo "Plan not found, will generate new plan"
       
       - name: Execute Terraform Apply/Destroy
         run: |
@@ -137,6 +137,15 @@ jobs:
             terraform init
             terraform destroy -auto-approve
           else
+            # Generate plan if not available
+            if [[ ! -f "tfplan" ]]; then
+              if [[ "${{ github.event.inputs.action }}" == "deploy" || "${{ github.event.inputs.action }}" == "sortie-de-veille" ]]; then
+                INSTANCES_RUNNING="true"
+              else
+                INSTANCES_RUNNING="false"
+              fi
+              terraform plan -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
+            fi
             terraform apply -auto-approve tfplan
             terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
             grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
