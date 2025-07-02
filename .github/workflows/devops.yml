@@ -37,8 +37,25 @@ jobs:
         with:
           terraform_version: 1.0.0
       
-      - name: Create Backend Resources
+      - name: Check and Create Backend Resources
         run: |
+          # Check if bucket exists and contains tfstate
+          BACKEND_EXISTS=false
+          if aws s3api head-bucket --bucket ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null && \
+             aws s3api head-object --bucket ${{ env.TF_BACKEND_BUCKET }} --key terraform.tfstate 2>/dev/null && \
+             aws dynamodb describe-table --table-name projet-c-terraform-locks 2>/dev/null; then
+            BACKEND_EXISTS=true
+          fi
+          
+          if [[ "$BACKEND_EXISTS" == "true" ]]; then
+            echo "Backend resources with tfstate already exist, skipping creation"
+            exit 0
+          fi
+          
+          # Release any DynamoDB locks
+          aws dynamodb delete-item --table-name projet-c-terraform-locks --key '{"LockID":{"S":"projet-c-terraform-state/terraform.tfstate-md5"}}' 2>/dev/null || true
+          
+          # Create backend resources
           cd $GITHUB_WORKSPACE/infra/terraform-backend
           terraform init
           terraform apply -auto-approve
