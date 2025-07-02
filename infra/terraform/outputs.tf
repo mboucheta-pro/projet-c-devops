@@ -35,17 +35,17 @@ output "eks_cluster_name" {
 
 output "vpc_id" {
   description = "ID du VPC"
-  value       = aws_vpc.projet-c.vpc_id
+  value       = aws_vpc.projet-c.id
 }
 
 output "private_subnets" {
   description = "IDs des subnets privés"
-  value       = aws_vpc.projet-c.private_subnets
+  value       = aws_subnet.private[*].id
 }
 
 output "public_subnets" {
   description = "IDs des subnets publics"
-  value       = aws_vpc.projet-c.public_subnets
+  value       = aws_subnet.public[*].id
 }
 
 output "db_secret_arn" {
