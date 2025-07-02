@@ -111,13 +111,83 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
-          retention-days: 7ame,Values=projet-c-private-1" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_subnet.private[1] $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=projet-c-private-2" --query 'Subnets[0].SubnetId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_internet_gateway.main $(aws ec2 describe-internet-gateways --filters "Name=tag:Name,Values=projet-c-igw" --query 'InternetGateways[0].InternetGatewayId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_nat_gateway.main $(aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=projet-c-nat" --query 'NatGateways[0].NatGatewayId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_eip.nat $(aws ec2 describe-addresses --filters "Name=tag:Name,Values=projet-c-nat-eip" --query 'Addresses[0].AllocationId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_route_table.public $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-public-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_route_table.private $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=projet-c-private-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          retention-days: 7
+
+  terraform-destroy:
+    needs: setup-backend
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+            
+      - name: Execute Terraform Destroy
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+          terraform destroy -auto-approve -var="instances_running=false"
+          
+          # Destroy backend resources
+          cd $GITHUB_WORKSPACE/infra/terraform-backend
+          terraform init
+          terraform destroy -auto-approve
+
+  configure-instances:
+    needs: terraform-deploy
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'sortie-de-veille'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Terraform Outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install Ansible
+        run: pip install ansible
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/projet-c.pem
+          chmod 400 ~/.ssh/projet-c.pem
+      
+      - name: Create Ansible inventory
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          
+          JENKINS_IP=$(jq -r '.jenkins_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          
+          cat > inventory.ini << EOF
+          [jenkins]
+          $JENKINS_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          
+          [sonarqube]
+          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          
+          [monitoring]
+          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          EOF
+      
+      - name: Run Ansible playbook
+        run: |
+          cd $GITHUB_WORKSPACE/infra/ansible
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory.ini playbook.yml \
+            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'rivate-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
           
           # Security Groups
           terraform import aws_security_group.alb $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-alb-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
@@ -172,30 +242,6 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp ${{ github.workspace }}/terraform-outputs.json s3://${{ env.TF_BACKEND_BUCKET }}/outputs/terraform-outputs.json
 
-  terraform-destroy:
-    needs: setup-backend
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-terraform
-        with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-            
-      - name: Execute Terraform Destroy
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          terraform init
-          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-          terraform destroy -auto-approve -var="instances_running=false"
-          
-          # Destroy backend resources
-          cd $GITHUB_WORKSPACE/infra/terraform-backend
-          terraform init
-          terraform destroy -auto-approve
-
-  configure-instances:
     needs: terraform-deploy
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'sortie-de-veille'
