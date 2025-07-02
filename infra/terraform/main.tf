@@ -65,6 +65,13 @@ resource "aws_security_group" "instances" {
   }
 
   ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     from_port   = 9000
     to_port     = 9000
     protocol    = "tcp"
@@ -99,23 +106,23 @@ resource "aws_security_group" "instances" {
   }
 }
 
-# GitHub Runner
-resource "aws_instance" "github-runner" {
+# Jenkins Server
+resource "aws_instance" "jenkins" {
   count = var.instances_running ? 1 : 0
   
   ami           = "ami-0a2e7efb4257c0907" # Amazon Linux 2023 pour ca-central-1
-  instance_type = "t3a.small" # Bon équilibre coût/performance
+  instance_type = "t3a.medium" # Jenkins nécessite plus de ressources
   subnet_id     = module.vpc.public_subnets[0]
   vpc_security_group_ids = [aws_security_group.instances.id]
   key_name      = data.aws_key_pair.projet-c.key_name
   
   root_block_device {
-    volume_size = 20
+    volume_size = 30
     volume_type = "gp3"
   }
   
   tags = merge(local.tags, {
-    Name = "${var.project}-github-runner"
+    Name = "${var.project}-jenkins"
   })
 
   lifecycle {

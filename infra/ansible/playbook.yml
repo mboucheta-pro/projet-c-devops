@@ -1,20 +1,50 @@
 ---
-- name: Configuration du runner GitHub
-  hosts: github-runner
+- name: Configuration de Jenkins
+  hosts: jenkins
   become: true
   gather_facts: false
-  remote_user: ubuntu
+  remote_user: ec2-user
   vars:
     ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   tasks:
-    - name: Installer les dépendances
-      apt:
-        name:
-          - git
-          - docker.io
+    - name: Attendre que SSH soit disponible
+      wait_for_connection:
+        delay: 10
+        timeout: 300
+      
+    - name: Installer Java 11
+      yum:
+        name: java-11-amazon-corretto
         state: present
-        update_cache: yes
+      ignore_errors: true
+      
+    - name: Ajouter le dépôt Jenkins
+      yum_repository:
+        name: jenkins
+        description: Jenkins Repository
+        baseurl: https://pkg.jenkins.io/redhat-stable/
+        gpgkey: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+        gpgcheck: true
+      ignore_errors: true
+      
+    - name: Installer Jenkins
+      yum:
+        name: jenkins
+        state: present
+      ignore_errors: true
+      
+    - name: Démarrer et activer Jenkins
+      systemd:
+        name: jenkins
+        state: started
+        enabled: true
+      ignore_errors: true
+      
+    - name: Installer Docker
+      yum:
+        name: docker
+        state: present
       ignore_errors: true
       
     - name: Démarrer et activer Docker
@@ -24,61 +54,18 @@
         enabled: true
       ignore_errors: true
       
-    - name: Ajouter l'utilisateur ubuntu au groupe docker
+    - name: Ajouter jenkins au groupe docker
       user:
-        name: ubuntu
+        name: jenkins
         groups: docker
         append: true
-      ignore_errors: true
-      
-    - name: Créer le répertoire pour le runner
-      file:
-        path: /home/ubuntu/actions-runner
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-      ignore_errors: true
-      
-    - name: Télécharger le runner GitHub
-      get_url:
-        url: https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
-        dest: /home/ubuntu/actions-runner/actions-runner.tar.gz
-        mode: '0644'
-      ignore_errors: true
-      
-    - name: Extraire l'archive du runner
-      unarchive:
-        src: /home/ubuntu/actions-runner/actions-runner.tar.gz
-        dest: /home/ubuntu/actions-runner
-        remote_src: true
-        owner: ubuntu
-        group: ubuntu
-      ignore_errors: true
-      
-    - name: Configurer le runner
-      shell: |
-        cd /home/ubuntu/actions-runner
-        ./config.sh --url https://github.com/{{ github_repo }} --token {{ runner_token }} --name "EC2-Runner" --unattended
-      become_user: ubuntu
-      ignore_errors: true
-      
-    - name: Installer le service du runner
-      shell: |
-        cd /home/ubuntu/actions-runner
-        ./svc.sh install
-      ignore_errors: true
-      
-    - name: Démarrer le service du runner
-      shell: |
-        cd /home/ubuntu/actions-runner
-        ./svc.sh start
       ignore_errors: true
 
 - name: Configuration de SonarQube
   hosts: sonarqube
   become: true
   gather_facts: false
+  remote_user: ec2-user
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
@@ -86,13 +73,12 @@
         timeout: 300
       
     - name: Installer les dépendances
-      apt:
+      yum:
         name:
-          - openjdk-17-jdk
+          - java-17-amazon-corretto
           - unzip
           - wget
         state: present
-        update_cache: yes
       ignore_errors: true
       
     - name: Créer l'utilisateur sonarqube
@@ -164,19 +150,24 @@
   hosts: monitoring
   become: true
   gather_facts: false
+  remote_user: ec2-user
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
         delay: 10
         timeout: 300
       
-    - name: Installer les dépendances
-      apt:
-        name:
-          - docker.io
-          - docker-compose
+    - name: Installer Docker
+      yum:
+        name: docker
         state: present
-        update_cache: yes
+      ignore_errors: true
+      
+    - name: Installer docker-compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
       ignore_errors: true
       
     - name: Démarrer et activer Docker
@@ -186,25 +177,25 @@
         enabled: true
       ignore_errors: true
       
-    - name: Ajouter l'utilisateur ubuntu au groupe docker
+    - name: Ajouter l'utilisateur ec2-user au groupe docker
       user:
-        name: ubuntu
+        name: ec2-user
         groups: docker
         append: true
       ignore_errors: true
       
     - name: Créer le répertoire pour Prometheus et Grafana
       file:
-        path: /home/ubuntu/monitoring
+        path: /home/ec2-user/monitoring
         state: directory
-        owner: ubuntu
-        group: ubuntu
+        owner: ec2-user
+        group: ec2-user
         mode: '0755'
       ignore_errors: true
       
     - name: Créer le fichier docker-compose.yml
       copy:
-        dest: /home/ubuntu/monitoring/docker-compose.yml
+        dest: /home/ec2-user/monitoring/docker-compose.yml
         content: |
           version: '3'
           services:
@@ -236,23 +227,23 @@
           volumes:
             prometheus_data:
             grafana_data:
-        owner: ubuntu
-        group: ubuntu
+        owner: ec2-user
+        group: ec2-user
         mode: '0644'
       ignore_errors: true
       
     - name: Créer le répertoire pour la configuration de Prometheus
       file:
-        path: /home/ubuntu/monitoring/prometheus
+        path: /home/ec2-user/monitoring/prometheus
         state: directory
-        owner: ubuntu
-        group: ubuntu
+        owner: ec2-user
+        group: ec2-user
         mode: '0755'
       ignore_errors: true
       
     - name: Créer le fichier de configuration Prometheus
       copy:
-        dest: /home/ubuntu/monitoring/prometheus/prometheus.yml
+        dest: /home/ec2-user/monitoring/prometheus/prometheus.yml
         content: |
           global:
             scrape_interval: 15s
@@ -261,14 +252,14 @@
             - job_name: 'prometheus'
               static_configs:
                 - targets: ['localhost:9090']
-        owner: ubuntu
-        group: ubuntu
+        owner: ec2-user
+        group: ec2-user
         mode: '0644'
       ignore_errors: true
       
     - name: Démarrer les conteneurs
       shell: |
-        cd /home/ubuntu/monitoring
+        cd /home/ec2-user/monitoring
         docker-compose up -d
-      become_user: ubuntu
+      become_user: ec2-user
       ignore_errors: true

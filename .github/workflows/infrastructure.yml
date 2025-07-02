@@ -15,14 +15,7 @@ on:
         options:
           - deploy
           - destroy
-      confirm_destroy:
-        description: 'Confirmer la destruction (IRRÉVERSIBLE)'
-        required: false
-        default: 'no'
-        type: choice
-        options:
-          - 'no'
-          - 'yes'
+
       instances_state:
         description: 'État des instances (running = actives, stopped = arrêtées pour économiser)'
         required: true
@@ -145,13 +138,11 @@ jobs:
           path: |
             ${{ github.workspace }}/infra/terraform/tfplan.txt
           retention-days: 7
-      
-
-
+    
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy' || (github.event.inputs.action == 'destroy' && github.event.inputs.confirm_destroy == 'yes')
+    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
       
@@ -222,59 +213,38 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/projet-c.pem
-          chmod 600 ~/.ssh/projet-c.pem
+          chmod 400 ~/.ssh/projet-c.pem
       
       - name: Create Ansible inventory
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
           
-          GITHUB_RUNNER_IP=$(jq -r '."github-runner_ip".value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          JENKINS_IP=$(jq -r '.jenkins_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
           SONARQUBE_IP=$(jq -r '.sonarqube_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
           MONITORING_IP=$(jq -r '.monitoring_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
           
           cat > inventory.ini << EOF
-          [github-runner]
-          $GITHUB_RUNNER_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          [jenkins]
+          $JENKINS_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [sonarqube]
-          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $SONARQUBE_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           
           [monitoring]
-          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
+          $MONITORING_IP ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/projet-c.pem
           EOF
-      
-      - name: Generate GitHub Runner token
-        id: runner-token
-        run: |
-          RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token)
-          
-          RUNNER_TOKEN=$(echo $RESPONSE | jq -r .token)
-          
-          if [[ "$RUNNER_TOKEN" == "null" || -z "$RUNNER_TOKEN" ]]; then
-            echo "Failed to get runner token, skipping runner configuration"
-            RUNNER_TOKEN="dummy-token"
-          else
-            echo "Runner token generated successfully"
-          fi
-          
-          echo "token=$RUNNER_TOKEN" >> $GITHUB_OUTPUT
       
       - name: Run Ansible playbook
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
           export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory.ini playbook.yml \
-            -e "github_repo=${{ github.repository }}" \
-            -e "runner_token=${{ steps.runner-token.outputs.token }}" \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
   terraform-destroy:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy' && github.event.inputs.confirm_destroy == 'yes'
+    if: github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
       

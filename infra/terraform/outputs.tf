@@ -1,6 +1,6 @@
-output "github-runner_ip" {
-  description = "Adresse IP publique du runner GitHub"
-  value       = var.instances_running ? aws_instance.github-runner[0].public_ip : null
+output "jenkins_ip" {
+  description = "Adresse IP publique du serveur Jenkins"
+  value       = var.instances_running ? aws_instance.jenkins[0].public_ip : null
 }
 
 output "sonarqube_ip" {
