@@ -23,7 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - uses: .github/actions/setup-terraform
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
       - name: Check and Create Backend Resources
         run: |
@@ -38,7 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: .github/actions/setup-terraform
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
       - name: Terraform Plan
         run: |
@@ -67,7 +71,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: .github/actions/setup-terraform
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
             
       - name: Download Terraform Plan from S3
         run: |
@@ -111,7 +117,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: .github/actions/setup-terraform
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
             
       - name: Execute Terraform Destroy
         run: |
