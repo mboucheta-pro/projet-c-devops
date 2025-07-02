@@ -142,36 +142,45 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan || echo "Plan not found, will generate new plan"
       
-      - name: Import Critical Existing Resources
+      - name: Import and Apply Terraform
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
-          # Import only critical resources that cause conflicts
-          echo "Importing ALB resources..."
-          ALB_ARN=$(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || echo "None")
-          if [[ "$ALB_ARN" != "None" ]]; then
-            terraform import aws_lb.devops $ALB_ARN 2>/dev/null || true
+          # Create a comprehensive import script
+          cat > import_resources.sh << 'EOF'
+          #!/bin/bash
+          set +e  # Continue on errors
+          
+          echo "Starting resource import..."
+          
+          # Import ALB
+          ALB_ARN=$(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null)
+          if [[ "$ALB_ARN" != "None" && "$ALB_ARN" != "" ]]; then
+            echo "Importing ALB: $ALB_ARN"
+            terraform import aws_lb.devops "$ALB_ARN" || echo "ALB import failed"
           fi
           
-          echo "Importing Target Groups..."
-          TG_JENKINS=$(aws elbv2 describe-target-groups --names "projet-c-jenkins-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "None")
-          TG_SONAR=$(aws elbv2 describe-target-groups --names "projet-c-sonarqube-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "None")
-          TG_MONITOR=$(aws elbv2 describe-target-groups --names "projet-c-monitoring-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "None")
+          # Import Target Groups
+          TG_JENKINS=$(aws elbv2 describe-target-groups --names "projet-c-jenkins-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null)
+          TG_SONAR=$(aws elbv2 describe-target-groups --names "projet-c-sonarqube-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null)
+          TG_MONITOR=$(aws elbv2 describe-target-groups --names "projet-c-monitoring-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null)
           
-          [[ "$TG_JENKINS" != "None" ]] && terraform import aws_lb_target_group.jenkins $TG_JENKINS 2>/dev/null || true
-          [[ "$TG_SONAR" != "None" ]] && terraform import aws_lb_target_group.sonarqube $TG_SONAR 2>/dev/null || true
-          [[ "$TG_MONITOR" != "None" ]] && terraform import aws_lb_target_group.monitoring $TG_MONITOR 2>/dev/null || true
+          [[ "$TG_JENKINS" != "None" && "$TG_JENKINS" != "" ]] && terraform import aws_lb_target_group.jenkins "$TG_JENKINS" || echo "Jenkins TG import failed"
+          [[ "$TG_SONAR" != "None" && "$TG_SONAR" != "" ]] && terraform import aws_lb_target_group.sonarqube "$TG_SONAR" || echo "SonarQube TG import failed"
+          [[ "$TG_MONITOR" != "None" && "$TG_MONITOR" != "" ]] && terraform import aws_lb_target_group.monitoring "$TG_MONITOR" || echo "Monitoring TG import failed"
           
-          echo "Importing DB Subnet Group..."
-          terraform import aws_db_subnet_group.default projet-c-db-subnet-group 2>/dev/null || true
+          # Import other resources
+          terraform import aws_db_subnet_group.default "projet-c-db-subnet-group" || echo "DB subnet group import failed"
+          terraform import aws_secretsmanager_secret.jenkins_admin "projet-c/jenkins/admin" || echo "Jenkins secret import failed"
+          terraform import aws_secretsmanager_secret.sonarqube_admin "projet-c/sonarqube/admin" || echo "SonarQube secret import failed"
+          terraform import aws_secretsmanager_secret.db_credentials "projet-c/rds/credentials" || echo "DB secret import failed"
           
-          echo "Importing Secrets..."
-          terraform import aws_secretsmanager_secret.jenkins_admin projet-c/jenkins/admin 2>/dev/null || true
-          terraform import aws_secretsmanager_secret.sonarqube_admin projet-c/sonarqube/admin 2>/dev/null || true
-          terraform import aws_secretsmanager_secret.db_credentials projet-c/rds/credentials 2>/dev/null || true
+          echo "Import phase completed"
+          EOF
           
-          echo "Import completed"
+          chmod +x import_resources.sh
+          ./import_resources.sh
       
       - name: Execute Terraform Apply
         run: |
