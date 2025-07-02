@@ -14,16 +14,9 @@ on:
         type: choice
         options:
           - deploy
+          - mise-en-veille
+          - sortie-de-veille
           - destroy
-
-      instances_state:
-        description: 'État des instances (running = actives, stopped = arrêtées pour économiser)'
-        required: true
-        default: 'running'
-        type: choice
-        options:
-          - 'running'
-          - 'stopped'
 
 env:
   AWS_REGION: ca-central-1
@@ -94,7 +87,7 @@ jobs:
   terraform-plan:
     needs: setup-backend-tf
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy'
+    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
     steps:
       - uses: actions/checkout@v4
       
@@ -120,7 +113,11 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
-          INSTANCES_RUNNING=$([[ "${{ github.event.inputs.instances_state }}" == "running" ]] && echo "true" || echo "false")
+          if [[ "${{ github.event.inputs.action }}" == "deploy" || "${{ github.event.inputs.action }}" == "sortie-de-veille" ]]; then
+            INSTANCES_RUNNING="true"
+          else
+            INSTANCES_RUNNING="false"
+          fi
           
           terraform validate
           terraform plan -var="db_password=$TF_VAR_db_password" -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
@@ -142,7 +139,7 @@ jobs:
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'destroy'
+    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille' || github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
       
@@ -164,6 +161,7 @@ jobs:
           terraform_version: 1.0.0
       
       - name: Download Terraform Plan from S3
+        if: github.event.inputs.action != 'destroy'
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan
@@ -172,16 +170,18 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
-          terraform apply -auto-approve tfplan
           
-          if [[ "${{ github.event.inputs.action }}" == "deploy" ]]; then
+          if [[ "${{ github.event.inputs.action }}" == "destroy" ]]; then
+            sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+            terraform destroy -auto-approve -var="db_password=dummy" -var="instances_running=false"
+          else
+            terraform apply -auto-approve tfplan
             terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
-            # Nettoyer le fichier en supprimant les lignes de debug
             grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
           fi
       
       - name: Upload Terraform Outputs
-        if: github.event.inputs.action == 'deploy'
+        if: github.event.inputs.action != 'destroy'
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
@@ -191,7 +191,7 @@ jobs:
   configure-instances:
     needs: terraform-apply
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy' && github.event.inputs.instances_state == 'running'
+    if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'sortie-de-veille'
     steps:
       - uses: actions/checkout@v4
       
@@ -240,29 +240,3 @@ jobs:
           export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory.ini playbook.yml \
             --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-
-  terraform-destroy:
-    needs: setup-backend-tf
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-            
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-      
-      - name: Terraform Destroy
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          terraform init
-          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-          terraform destroy -auto-approve -var="db_password=dummy" -var="instances_running=false"
