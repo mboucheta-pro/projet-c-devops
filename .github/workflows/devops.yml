@@ -42,8 +42,7 @@ jobs:
           # Check if bucket exists and contains tfstate
           BACKEND_EXISTS=false
           if aws s3api head-bucket --bucket ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null && \
-             aws s3api head-object --bucket ${{ env.TF_BACKEND_BUCKET }} --key terraform.tfstate 2>/dev/null && \
-             aws dynamodb describe-table --table-name projet-c-terraform-locks 2>/dev/null; then
+             aws s3api head-object --bucket ${{ env.TF_BACKEND_BUCKET }} --key terraform.tfstate 2>/dev/null ; then
             BACKEND_EXISTS=true
           fi
           
