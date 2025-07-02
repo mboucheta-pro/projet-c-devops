@@ -60,8 +60,11 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform-backend
           terraform init
           
-          # Try to import existing resources
+          # Import all existing backend resources
           terraform import aws_s3_bucket.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
+          terraform import aws_s3_bucket_versioning.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
+          terraform import aws_s3_bucket_server_side_encryption_configuration.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
+          terraform import aws_s3_bucket_public_access_block.terraform_state ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null || true
           terraform import aws_dynamodb_table.terraform_locks projet-c-terraform-locks 2>/dev/null || true
           
           # Apply configuration
