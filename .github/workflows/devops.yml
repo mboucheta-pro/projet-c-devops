@@ -50,18 +50,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-      
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-      
       - name: Terraform Plan
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
@@ -81,40 +69,18 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp tfplan s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan
-      
-      - name: Upload Terraform Plan (local artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: |
-            ${{ github.workspace }}/infra/terraform/tfplan.txt
-          retention-days: 7
-    
+          
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy' || github.event.inputs.action == 'mise-en-veille' || github.event.inputs.action == 'sortie-de-veille'
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-      
+            
       - name: Download Terraform Plan from S3
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan || echo "Plan not found, will generate new plan"
-      
-
       
       - name: Execute Terraform Apply
         run: |
@@ -141,25 +107,19 @@ jobs:
           path: ${{ github.workspace }}/terraform-outputs.json
           retention-days: 7
 
+      - name: Upload Terraform Outputs to S3
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          aws s3 cp ${{ github.workspace }}/terraform-outputs.json s3://${{ env.TF_BACKEND_BUCKET }}/outputs/terraform-outputs.json
+
+
   terraform-destroy:
     needs: setup-backend
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Decode AWS credentials
-        run: |
-          echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
-          echo "AWS_ACCESS_KEY_ID=$(jq -r .aws_access_key_id aws-credentials.json)" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$(jq -r .aws_secret_access_key aws-credentials.json)" >> $GITHUB_ENV
-          rm aws-credentials.json
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-      
+            
       - name: Execute Terraform Destroy
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
