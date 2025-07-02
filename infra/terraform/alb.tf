@@ -4,7 +4,7 @@ resource "aws_lb" "devops" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = module.vpc.public_subnets
+  subnets            = aws_vpc.projet-c.public_subnets
 
   tags = merge(local.tags, {
     Purpose = "DevOps-Infrastructure"
@@ -16,7 +16,7 @@ resource "aws_lb_target_group" "jenkins" {
   name     = "${var.project}-jenkins-tg"
   port     = 8080
   protocol = "HTTP"
-  vpc_id   = module.vpc.vpc_id
+  vpc_id   = aws_vpc.projet-c.vpc_id
 
   health_check {
     enabled             = true
@@ -37,7 +37,7 @@ resource "aws_lb_target_group" "sonarqube" {
   name     = "${var.project}-sonarqube-tg"
   port     = 9000
   protocol = "HTTP"
-  vpc_id   = module.vpc.vpc_id
+  vpc_id   = aws_vpc.projet-c.vpc_id
 
   health_check {
     enabled             = true
@@ -58,7 +58,7 @@ resource "aws_lb_target_group" "monitoring" {
   name     = "${var.project}-monitoring-tg"
   port     = 3000
   protocol = "HTTP"
-  vpc_id   = module.vpc.vpc_id
+  vpc_id   = aws_vpc.projet-c.vpc_id
 
   health_check {
     enabled             = true
