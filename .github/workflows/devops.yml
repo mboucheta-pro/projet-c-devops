@@ -142,10 +142,79 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           aws s3 cp s3://${{ env.TF_BACKEND_BUCKET }}/plans/tfplan tfplan || echo "Plan not found, will generate new plan"
       
-      - name: Execute Terraform Apply
+      - name: Import All Existing Resources
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
+          
+          # Get AWS account ID
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          # Import VPC resources (using module)
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=projet-c-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
+          if [[ "$VPC_ID" != "" && "$VPC_ID" != "None" ]]; then
+            terraform import 'module.vpc.aws_vpc.this[0]' $VPC_ID 2>/dev/null || true
+          fi
+          
+          # Import ALB resources
+          ALB_ARN=$(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || echo "")
+          if [[ "$ALB_ARN" != "" && "$ALB_ARN" != "None" ]]; then
+            terraform import aws_lb.devops $ALB_ARN 2>/dev/null || true
+          fi
+          
+          # Import Target Groups
+          for TG_NAME in "projet-c-jenkins-tg" "projet-c-sonarqube-tg" "projet-c-monitoring-tg"; do
+            TG_ARN=$(aws elbv2 describe-target-groups --names $TG_NAME --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || echo "")
+            if [[ "$TG_ARN" != "" && "$TG_ARN" != "None" ]]; then
+              case $TG_NAME in
+                "projet-c-jenkins-tg") terraform import aws_lb_target_group.jenkins $TG_ARN 2>/dev/null || true ;;
+                "projet-c-sonarqube-tg") terraform import aws_lb_target_group.sonarqube $TG_ARN 2>/dev/null || true ;;
+                "projet-c-monitoring-tg") terraform import aws_lb_target_group.monitoring $TG_ARN 2>/dev/null || true ;;
+              esac
+            fi
+          done
+          
+          # Import Security Groups
+          for SG_NAME in "projet-c-alb-sg" "projet-c-instances-sg" "projet-c-db-sg"; do
+            SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$SG_NAME" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+            if [[ "$SG_ID" != "" && "$SG_ID" != "None" ]]; then
+              case $SG_NAME in
+                "projet-c-alb-sg") terraform import aws_security_group.alb $SG_ID 2>/dev/null || true ;;
+                "projet-c-instances-sg") terraform import aws_security_group.instances $SG_ID 2>/dev/null || true ;;
+                "projet-c-db-sg") terraform import aws_security_group.db $SG_ID 2>/dev/null || true ;;
+              esac
+            fi
+          done
+          
+          # Import EC2 Instances
+          for INSTANCE_NAME in "projet-c-jenkins" "projet-c-sonarqube" "projet-c-monitoring"; do
+            INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$INSTANCE_NAME" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null || echo "")
+            if [[ "$INSTANCE_ID" != "" && "$INSTANCE_ID" != "None" ]]; then
+              case $INSTANCE_NAME in
+                "projet-c-jenkins") terraform import 'aws_instance.jenkins[0]' $INSTANCE_ID 2>/dev/null || true ;;
+                "projet-c-sonarqube") terraform import 'aws_instance.sonarqube[0]' $INSTANCE_ID 2>/dev/null || true ;;
+                "projet-c-monitoring") terraform import 'aws_instance.monitoring[0]' $INSTANCE_ID 2>/dev/null || true ;;
+              esac
+            fi
+          done
+          
+          # Import RDS resources
+          terraform import aws_db_subnet_group.default projet-c-db-subnet-group 2>/dev/null || true
+          terraform import aws_db_instance.database projet-c-db 2>/dev/null || true
+          
+          # Import Secrets Manager
+          terraform import aws_secretsmanager_secret.jenkins_admin projet-c/jenkins/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.sonarqube_admin projet-c/sonarqube/admin 2>/dev/null || true
+          terraform import aws_secretsmanager_secret.db_credentials projet-c/rds/credentials 2>/dev/null || true
+          
+          # Import EKS Cluster
+          terraform import 'module.eks.aws_eks_cluster.this[0]' projet-c-eks 2>/dev/null || true
+          
+          echo "Import completed - some resources may not exist yet and that's normal"
+      
+      - name: Execute Terraform Apply
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
           
           # Generate plan if not available
           if [[ ! -f "tfplan" ]]; then
