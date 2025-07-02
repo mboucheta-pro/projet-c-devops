@@ -39,14 +39,6 @@ jobs:
       
       - name: Check and Create Backend Resources
         run: |
-          # Check if bucket exists and contains tfstate
-          if aws s3api head-bucket --bucket ${{ env.TF_BACKEND_BUCKET }} 2>/dev/null && \
-             aws s3api head-object --bucket ${{ env.TF_BACKEND_BUCKET }} --key env/terraform.tfstate 2>/dev/null; then
-            echo "Backend S3 bucket with tfstate already exists, skipping creation"
-            exit 0
-          fi
-          
-          # Create backend resources
           cd $GITHUB_WORKSPACE/infra/terraform-backend
           terraform init
           terraform apply -auto-approve
