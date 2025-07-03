@@ -74,6 +74,7 @@ resource "aws_secretsmanager_secret" "jenkins_admin" {
   name = "${var.project}/jenkins/admin"
   description = "Credentials admin pour Jenkins"
   recovery_window_in_days = 0
+  force_overwrite_replica_secret = true
   tags = local.tags
 }
 
@@ -95,6 +96,7 @@ resource "aws_secretsmanager_secret" "sonarqube_admin" {
   name = "${var.project}/sonarqube/admin"
   description = "Credentials admin pour SonarQube"
   recovery_window_in_days = 0
+  force_overwrite_replica_secret = true
   tags = local.tags
 }
 
