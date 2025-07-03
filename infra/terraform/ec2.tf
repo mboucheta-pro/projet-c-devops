@@ -127,11 +127,67 @@ resource "aws_instance" "github_runner" {
     volume_type = "gp3"
   }
   
-  user_data = base64encode(templatefile("${path.module}/scripts/github-runner-setup.sh", {
-    github_token = var.github_token
-    github_repo  = var.github_repo
-    runner_name  = "${var.project}-runner-${random_id.runner_suffix.hex}"
-  }))
+  user_data = base64encode(<<-EOF
+#!/bin/bash
+set -e
+
+# Variables
+GITHUB_TOKEN="${var.github_token}"
+GITHUB_REPO="${var.github_repo}"
+RUNNER_NAME="${var.project}-runner-${random_id.runner_suffix.hex}"
+RUNNER_USER="runner"
+
+# Mise à jour du système
+apt-get update
+apt-get upgrade -y
+
+# Installation des dépendances
+apt-get install -y curl wget jq git docker.io
+
+# Démarrage de Docker
+systemctl start docker
+systemctl enable docker
+
+# Création de l'utilisateur runner
+useradd -m -s /bin/bash $RUNNER_USER
+usermod -aG docker $RUNNER_USER
+
+# Téléchargement du runner GitHub
+cd /home/$RUNNER_USER
+RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | jq -r '.tag_name' | sed 's/v//')
+wget -O actions-runner-linux-x64.tar.gz https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/actions-runner-linux-x64-$RUNNER_VERSION.tar.gz
+tar xzf actions-runner-linux-x64.tar.gz
+rm actions-runner-linux-x64.tar.gz
+
+# Changement de propriétaire
+chown -R $RUNNER_USER:$RUNNER_USER /home/$RUNNER_USER
+
+# Obtention du token d'enregistrement
+REGISTRATION_TOKEN=$(curl -s -X POST \
+  -H "Authorization: token $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github.v3+json" \
+  https://api.github.com/repos/$GITHUB_REPO/actions/runners/registration-token | jq -r '.token')
+
+# Configuration du runner
+sudo -u $RUNNER_USER ./config.sh \
+  --url https://github.com/$GITHUB_REPO \
+  --token $REGISTRATION_TOKEN \
+  --name $RUNNER_NAME \
+  --work _work \
+  --labels self-hosted,linux,x64,aws \
+  --unattended
+
+# Installation du service
+./svc.sh install $RUNNER_USER
+./svc.sh start
+
+# Installation d'outils supplémentaires
+apt-get install -y nodejs npm python3 python3-pip
+npm install -g yarn
+
+echo "GitHub Runner installé et configuré avec succès"
+EOF
+  )
   
   tags = merge(local.tags, {
     Name = "${var.project}-github-runner"

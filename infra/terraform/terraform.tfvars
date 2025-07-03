@@ -2,9 +2,6 @@
 project = "projet-c"
 region  = "ca-central-1"
 
-# Configuration de la base de données
-db_username = "dbadmin"
-
 # Configuration GitHub Runner
-github_token = "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"
+github_token = "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"
 github_repo  = "mboucheta-pro/projet-c-devops"
