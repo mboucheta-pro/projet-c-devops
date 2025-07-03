@@ -17,8 +17,6 @@ env:
 
 jobs:
   terraform-deploy:
-    # Il existe l'image hashicorp/terraform-ansible qui contient Terraform et Ansible pré-installés
-    # Mais il est préférable d'utiliser ubuntu-latest pour plus de contrôle et de flexibilité
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy'
     steps:
