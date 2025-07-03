@@ -25,8 +25,6 @@ module "eks" {
     }
   }
 
-  tags = local.tags
-
   # Ignorer les changements dans les groupes de nœuds pour éviter les recréations inutiles
   cluster_timeouts = {
     create = "30m"

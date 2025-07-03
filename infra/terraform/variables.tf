@@ -1,3 +1,4 @@
+# Configuration générale
 variable "project" {
   description = "Nom du projet"
   type        = string
@@ -10,19 +11,20 @@ variable "region" {
   default     = "ca-central-1"
 }
 
+# Configuration réseau
 variable "vpc_cidr" {
   description = "CIDR du VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
-variable "db_username" {
-  description = "Nom d'utilisateur pour la base de données"
+variable "ubuntu_ami" {
+  description = "AMI Ubuntu 24.04 LTS"
   type        = string
-  default     = "dbadmin"
-  sensitive   = true
+  default     = "ami-0c0a551d0459e9d39"
 }
 
+# Configuration CI/CD
 variable "github_token" {
   description = "Token GitHub pour l'enregistrement du runner"
   type        = string

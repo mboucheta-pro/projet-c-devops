@@ -1,0 +1,33 @@
+name: Deploy with Ansible
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  ansible-deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+      - name: Run Ansible Playbook
+        run: |
+          cd infra/ansible
+          ansible-playbook -i inventory/${{ github.event.inputs.environment }}.yml \
+            playbook.yml
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
