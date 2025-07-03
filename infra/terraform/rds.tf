@@ -11,14 +11,6 @@ resource "aws_db_subnet_group" "default" {
   }
 }
 
-# Secret géré par AWS pour les credentials RDS
-resource "aws_secretsmanager_secret" "db_credentials" {
-  name = "${var.project}/rds/credentials"
-  description = "Credentials pour la base de données RDS"
-  recovery_window_in_days = 0
-  tags = local.tags
-}
-
 resource "aws_db_instance" "database" {
   allocated_storage      = 20
   storage_type           = "gp3"
