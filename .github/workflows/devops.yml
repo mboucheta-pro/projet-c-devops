@@ -45,45 +45,6 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-      
-      - name: Install Ansible
-        run: pip install ansible
-      
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/projet-c.pem
-          chmod 400 ~/.ssh/projet-c.pem
-      
-      - name: Create Ansible inventory
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          
-          JENKINS_IP=$(jq -r '.jenkins_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
-          
-          cat > inventory.ini << EOF
-          [jenkins]
-          $JENKINS_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
-          
-          [sonarqube]
-          $SONARQUBE_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
-          
-          [monitoring]
-          $MONITORING_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/projet-c.pem
-          EOF
-      
-      - name: Run Ansible playbook
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i inventory.ini playbook.yml
           
   terraform-destroy:
     runs-on: ubuntu-latest
