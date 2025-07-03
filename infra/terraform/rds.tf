@@ -29,7 +29,6 @@ resource "aws_db_instance" "database" {
   
   # Gestion automatique des credentials par AWS Secrets Manager
   manage_master_user_password = true
-  master_user_secret_kms_key_id = aws_secretsmanager_secret.db_credentials.kms_key_id
   username = var.db_username
   
   db_subnet_group_name   = aws_db_subnet_group.default.name
