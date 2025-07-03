@@ -1,0 +1,53 @@
+name: Gestion du backend projet-c
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Gestion du backend'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - create
+          - destroy
+
+env:
+  TF_BACKEND_BUCKET: projet-c-terraform-state
+
+jobs:
+  backend-create:
+    # Il existe l'image hashicorp/terraform-ansible qui contient Terraform et Ansible pré-installés
+    # Mais il est préférable d'utiliser ubuntu-latest pour plus de contrôle et de flexibilité
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'create'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Plan and Apply Terraform
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform-backend
+          terraform init
+          terraform validate
+          terraform plan -out="tfplan"
+          terraform apply -auto-approve tfplan
+          
+  backend-destroy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+            
+      - name: Execute Terraform Destroy
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform-backend
+          terraform init
+          terraform destroy -auto-approve
