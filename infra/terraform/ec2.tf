@@ -5,8 +5,6 @@ data "aws_key_pair" "projet-c" {
 
 # Jenkins Server
 resource "aws_instance" "jenkins" {
-  count = var.instances_running ? 1 : 0
-  
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # Jenkins nécessite plus de ressources
   subnet_id     = aws_subnet.private[0].id
@@ -29,8 +27,6 @@ resource "aws_instance" "jenkins" {
 
 # SonarQube Server
 resource "aws_instance" "sonarqube" {
-  count = var.instances_running ? 1 : 0
-  
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.medium" # SonarQube nécessite plus de RAM
   subnet_id     = aws_subnet.private[0].id
@@ -52,9 +48,7 @@ resource "aws_instance" "sonarqube" {
 }
 
 # Monitoring Server (Prometheus + Grafana)
-resource "aws_instance" "monitoring" {
-  count = var.instances_running ? 1 : 0
-  
+resource "aws_instance" "monitoring" {  
   ami           = "ami-0c0a551d0459e9d39" # Ubuntu 24.04 LTS pour ca-central-1
   instance_type = "t3a.small"
   subnet_id     = aws_subnet.private[1].id

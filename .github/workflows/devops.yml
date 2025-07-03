@@ -16,21 +16,6 @@ env:
   TF_BACKEND_BUCKET: projet-c-terraform-state
 
 jobs:
-  # setup-backend:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-      
-  #     - uses: ./.github/actions/setup-terraform
-  #       with:
-  #         aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-      
-  #     - name: Check and Create Backend Resources
-  #       run: |
-  #         cd $GITHUB_WORKSPACE/infra/terraform-backend
-  #         terraform init
-  #         terraform apply -auto-approve
-  
   terraform-deploy:
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy'
@@ -46,12 +31,9 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
-          # Set instance state
-          INSTANCES_RUNNING="true"
-          
           # Plan and Apply
           terraform validate
-          terraform plan -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
+          terraform plan -out="tfplan"
           terraform apply -auto-approve tfplan
           terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
           grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
@@ -61,43 +43,7 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
-          retention-days: 7
 
-  terraform-destroy:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-terraform
-        with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-            
-      - name: Execute Terraform Destroy
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          terraform init
-          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-          terraform destroy -auto-approve -var="instances_running=false"
-          
-          # Destroy backend resources
-          cd $GITHUB_WORKSPACE/infra/terraform-backend
-          terraform init
-          terraform destroy -auto-approve
-
-  configure-instances:
-    needs: terraform-deploy
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download Terraform Outputs
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}
-      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -116,9 +62,9 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
           
-          JENKINS_IP=$(jq -r '.jenkins_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
-          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
-          MONITORING_IP=$(jq -r '.monitoring_ip.value // empty' $GITHUB_WORKSPACE/terraform-outputs.json)
+          JENKINS_IP=$(jq -r '.jenkins_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
+          SONARQUBE_IP=$(jq -r '.sonarqube_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
+          MONITORING_IP=$(jq -r '.monitoring_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
           
           cat > inventory.ini << EOF
           [jenkins]
@@ -135,58 +81,21 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/infra/ansible
           export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook -i inventory.ini playbook.yml \
-            --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'rivate-rt" --query 'RouteTables[0].RouteTableId' --output text 2>/dev/null) 2>/dev/null || true
+          ansible-playbook -i inventory.ini playbook.yml
           
-          # Security Groups
-          terraform import aws_security_group.alb $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-alb-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_security_group.instances $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-instances-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_security_group.db $(aws ec2 describe-security-groups --filters "Name=group-name,Values=projet-c-db-sg" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null) 2>/dev/null || true
-          
-          # ALB resources
-          terraform import aws_lb.devops $(aws elbv2 describe-load-balancers --names "projet-c-devops-alb" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_lb_target_group.jenkins $(aws elbv2 describe-target-groups --names "projet-c-jenkins-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_lb_target_group.sonarqube $(aws elbv2 describe-target-groups --names "projet-c-sonarqube-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import aws_lb_target_group.monitoring $(aws elbv2 describe-target-groups --names "projet-c-monitoring-tg" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null) 2>/dev/null || true
-          
-          # EC2 instances
-          terraform import 'aws_instance.jenkins[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-jenkins" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import 'aws_instance.sonarqube[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-sonarqube" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
-          terraform import 'aws_instance.monitoring[0]' $(aws ec2 describe-instances --filters "Name=tag:Name,Values=projet-c-monitoring" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null) 2>/dev/null || true
-          
-          # RDS resources
-          terraform import aws_db_subnet_group.default projet-c-db-subnet-group 2>/dev/null || true
-          terraform import aws_db_instance.database projet-c-db 2>/dev/null || true
-          
-          # Secrets Manager
-          terraform import aws_secretsmanager_secret.jenkins_admin projet-c/jenkins/admin 2>/dev/null || true
-          terraform import aws_secretsmanager_secret.sonarqube_admin projet-c/sonarqube/admin 2>/dev/null || true
-          terraform import aws_secretsmanager_secret.db_credentials projet-c/rds/credentials 2>/dev/null || true
-          
-          # EKS cluster
-          terraform import 'module.eks.aws_eks_cluster.this[0]' projet-c-eks 2>/dev/null || true
-          
-          # Generate plan if not available
-          if [[ ! -f "tfplan" ]]; then
-            if [[ "${{ github.event.inputs.action }}" == "deploy" || "${{ github.event.inputs.action }}" == "sortie-de-veille" ]]; then
-              INSTANCES_RUNNING="true"
-            else
-              INSTANCES_RUNNING="false"
-            fi
-            terraform plan -var="instances_running=$INSTANCES_RUNNING" -out="tfplan"
-          fi
-          terraform apply -auto-approve tfplan
-          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
-          grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
-      
-      - name: Upload Terraform Outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}/terraform-outputs.json
-          retention-days: 7
+  terraform-destroy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload Terraform Outputs to S3
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+            
+      - name: Execute Terraform Destroy
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
-          aws s3 cp ${{ github.workspace }}/terraform-outputs.json s3://${{ env.TF_BACKEND_BUCKET }}/outputs/terraform-outputs.json
+          terraform init
+          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+          terraform destroy -auto-approve

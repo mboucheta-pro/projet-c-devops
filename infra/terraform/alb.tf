@@ -77,21 +77,18 @@ resource "aws_lb_target_group" "monitoring" {
 
 # Target Group Attachments
 resource "aws_lb_target_group_attachment" "jenkins" {
-  count            = var.instances_running ? 1 : 0
   target_group_arn = aws_lb_target_group.jenkins.arn
   target_id        = aws_instance.jenkins[0].id
   port             = 8080
 }
 
 resource "aws_lb_target_group_attachment" "sonarqube" {
-  count            = var.instances_running ? 1 : 0
   target_group_arn = aws_lb_target_group.sonarqube.arn
   target_id        = aws_instance.sonarqube[0].id
   port             = 9000
 }
 
 resource "aws_lb_target_group_attachment" "monitoring" {
-  count            = var.instances_running ? 1 : 0
   target_group_arn = aws_lb_target_group.monitoring.arn
   target_id        = aws_instance.monitoring[0].id
   port             = 3000

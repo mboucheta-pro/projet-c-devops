@@ -22,9 +22,3 @@ variable "db_username" {
   default     = "dbadmin"
   sensitive   = true
 }
-
-variable "instances_running" {
-  description = "Contrôle si les instances EC2 doivent être en cours d'exécution"
-  type        = bool
-  default     = true
-}

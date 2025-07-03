@@ -7,68 +7,67 @@
   vars:
     ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    container_count: 4
+    default_container_name: docker
+    default_container_image: ubuntu
+    default_container_command: sleep 1
   tasks:
     - name: Attendre que SSH soit disponible
       wait_for_connection:
         delay: 10
         timeout: 300
       
-    - name: Mettre à jour le cache des packages
+    - name: Install aptitude
       apt:
-        update_cache: yes
-      ignore_errors: true
-      
-    - name: Installer Java 11
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Install required system packages
       apt:
-        name: openjdk-11-jdk
-        state: present
-      ignore_errors: true
-      
-    - name: Ajouter la clé GPG Jenkins
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true      
+
+    - name: Add Docker GPG apt Key
       apt_key:
-        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-      ignore_errors: true
-      
-    - name: Ajouter le dépôt Jenkins
+
+    - name: Add Docker Repository
       apt_repository:
-        repo: deb https://pkg.jenkins.io/debian-stable binary/
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
         state: present
-      ignore_errors: true
-      
-    - name: Installer Jenkins
+
+    - name: Update apt and install docker-ce
       apt:
-        name: jenkins
-        state: present
-        update_cache: yes
-      ignore_errors: true
-      
-    - name: Démarrer et activer Jenkins
-      systemd:
-        name: jenkins
-        state: started
-        enabled: true
-      ignore_errors: true
-      
-    - name: Installer Docker
-      apt:
-        name: docker.io
-        state: present
-      ignore_errors: true
-      
-    - name: Démarrer et activer Docker
-      systemd:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
         name: docker
-        state: started
-        enabled: true
-      ignore_errors: true
-      
-    - name: Ajouter jenkins au groupe docker
-      user:
-        name: jenkins
-        groups: docker
-        append: true
-      ignore_errors: true
+    
+    - name: Pull default Docker image
+      community.docker.docker_image:
+        name: "{{ default_container_image }}"
+        source: pull
+
+    - name: Create default containers
+      community.docker.docker_container:
+        name: "{{ default_container_name }}{{ item }}"
+        image: "{{ default_container_image }}"
+        command: "{{ default_container_command }}"
+        state: present
+      with_sequence: count={{ container_count }}
 
 - name: Configuration de SonarQube
   hosts: sonarqube
@@ -76,84 +75,9 @@
   gather_facts: false
   remote_user: ubuntu
   tasks:
-    - name: Attendre que SSH soit disponible
-      wait_for_connection:
-        delay: 10
-        timeout: 300
-      
-    - name: Installer les dépendances
+    - name: Mettre à jour le cache des packages
       apt:
-        name:
-          - openjdk-17-jdk
-          - unzip
-          - wget
-        state: present
         update_cache: yes
-      ignore_errors: true
-      
-    - name: Créer l'utilisateur sonarqube
-      user:
-        name: sonarqube
-        shell: /bin/bash
-        home: /opt/sonarqube
-        create_home: true
-      ignore_errors: true
-      
-    - name: Télécharger SonarQube
-      get_url:
-        url: https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.1.69595.zip
-        dest: /tmp/sonarqube.zip
-        mode: '0644'
-      ignore_errors: true
-      
-    - name: Extraire SonarQube
-      unarchive:
-        src: /tmp/sonarqube.zip
-        dest: /opt
-        remote_src: true
-        owner: sonarqube
-        group: sonarqube
-      ignore_errors: true
-      
-    - name: Créer un lien symbolique
-      file:
-        src: /opt/sonarqube-9.9.1.69595
-        dest: /opt/sonarqube
-        state: link
-        owner: sonarqube
-        group: sonarqube
-      ignore_errors: true
-      
-    - name: Créer le service SonarQube
-      copy:
-        dest: /etc/systemd/system/sonarqube.service
-        content: |
-          [Unit]
-          Description=SonarQube service
-          After=network.target
-          
-          [Service]
-          Type=simple
-          User=sonarqube
-          Group=sonarqube
-          ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
-          ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
-          Restart=always
-          
-          [Install]
-          WantedBy=multi-user.target
-      ignore_errors: true
-      
-    - name: Recharger systemd
-      systemd:
-        daemon_reload: true
-      ignore_errors: true
-      
-    - name: Démarrer et activer SonarQube
-      systemd:
-        name: sonarqube
-        state: started
-        enabled: true
       ignore_errors: true
 
 - name: Configuration du monitoring
@@ -162,110 +86,115 @@
   gather_facts: false
   remote_user: ubuntu
   tasks:
-    - name: Attendre que SSH soit disponible
-      wait_for_connection:
-        delay: 10
-        timeout: 300
-      
-    - name: Installer Docker
+    - name: Mettre à jour le cache des packages
       apt:
-        name: 
-          - docker.io
-          - docker-compose
-        state: present
         update_cache: yes
       ignore_errors: true
+
+    # - name: Attendre que SSH soit disponible
+    #   wait_for_connection:
+    #     delay: 10
+    #     timeout: 300
       
-    - name: Démarrer et activer Docker
-      systemd:
-        name: docker
-        state: started
-        enabled: true
-      ignore_errors: true
+    # - name: Installer Docker
+    #   apt:
+    #     name: 
+    #       - docker.io
+    #       - docker-compose
+    #     state: present
+    #     update_cache: yes
+    #   ignore_errors: true
       
-    - name: Ajouter l'utilisateur ubuntu au groupe docker
-      user:
-        name: ubuntu
-        groups: docker
-        append: true
-      ignore_errors: true
+    # - name: Démarrer et activer Docker
+    #   systemd:
+    #     name: docker
+    #     state: started
+    #     enabled: true
+    #   ignore_errors: true
       
-    - name: Créer le répertoire pour Prometheus et Grafana
-      file:
-        path: /home/ubuntu/monitoring
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-      ignore_errors: true
+    # - name: Ajouter l'utilisateur ubuntu au groupe docker
+    #   user:
+    #     name: ubuntu
+    #     groups: docker
+    #     append: true
+    #   ignore_errors: true
       
-    - name: Créer le fichier docker-compose.yml
-      copy:
-        dest: /home/ubuntu/monitoring/docker-compose.yml
-        content: |
-          version: '3'
-          services:
-            prometheus:
-              image: prom/prometheus:latest
-              volumes:
-                - ./prometheus:/etc/prometheus
-                - prometheus_data:/prometheus
-              command:
-                - '--config.file=/etc/prometheus/prometheus.yml'
-                - '--storage.tsdb.path=/prometheus'
-                - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-                - '--web.console.templates=/usr/share/prometheus/consoles'
-              ports:
-                - 9090:9090
-              restart: always
+    # - name: Créer le répertoire pour Prometheus et Grafana
+    #   file:
+    #     path: /home/ubuntu/monitoring
+    #     state: directory
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: '0755'
+    #   ignore_errors: true
+      
+    # - name: Créer le fichier docker-compose.yml
+    #   copy:
+    #     dest: /home/ubuntu/monitoring/docker-compose.yml
+    #     content: |
+    #       version: '3'
+    #       services:
+    #         prometheus:
+    #           image: prom/prometheus:latest
+    #           volumes:
+    #             - ./prometheus:/etc/prometheus
+    #             - prometheus_data:/prometheus
+    #           command:
+    #             - '--config.file=/etc/prometheus/prometheus.yml'
+    #             - '--storage.tsdb.path=/prometheus'
+    #             - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+    #             - '--web.console.templates=/usr/share/prometheus/consoles'
+    #           ports:
+    #             - 9090:9090
+    #           restart: always
           
-            grafana:
-              image: grafana/grafana:latest
-              volumes:
-                - grafana_data:/var/lib/grafana
-              environment:
-                - GF_SECURITY_ADMIN_PASSWORD=admin
-                - GF_USERS_ALLOW_SIGN_UP=false
-              ports:
-                - 3000:3000
-              restart: always
+    #         grafana:
+    #           image: grafana/grafana:latest
+    #           volumes:
+    #             - grafana_data:/var/lib/grafana
+    #           environment:
+    #             - GF_SECURITY_ADMIN_PASSWORD=admin
+    #             - GF_USERS_ALLOW_SIGN_UP=false
+    #           ports:
+    #             - 3000:3000
+    #           restart: always
           
-          volumes:
-            prometheus_data:
-            grafana_data:
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
-      ignore_errors: true
+    #       volumes:
+    #         prometheus_data:
+    #         grafana_data:
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: '0644'
+    #   ignore_errors: true
       
-    - name: Créer le répertoire pour la configuration de Prometheus
-      file:
-        path: /home/ubuntu/monitoring/prometheus
-        state: directory
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
-      ignore_errors: true
+    # - name: Créer le répertoire pour la configuration de Prometheus
+    #   file:
+    #     path: /home/ubuntu/monitoring/prometheus
+    #     state: directory
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: '0755'
+    #   ignore_errors: true
       
-    - name: Créer le fichier de configuration Prometheus
-      copy:
-        dest: /home/ubuntu/monitoring/prometheus/prometheus.yml
-        content: |
-          global:
-            scrape_interval: 15s
+    # - name: Créer le fichier de configuration Prometheus
+    #   copy:
+    #     dest: /home/ubuntu/monitoring/prometheus/prometheus.yml
+    #     content: |
+    #       global:
+    #         scrape_interval: 15s
           
-          scrape_configs:
-            - job_name: 'prometheus'
-              static_configs:
-                - targets: ['localhost:9090']
-        owner: ubuntu
-        group: ubuntu
-        mode: '0644'
-      ignore_errors: true
+    #       scrape_configs:
+    #         - job_name: 'prometheus'
+    #           static_configs:
+    #             - targets: ['localhost:9090']
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: '0644'
+    #   ignore_errors: true
       
-    - name: Démarrer les conteneurs
-      shell: |
-        cd /home/ubuntu/monitoring
-        docker-compose up -d
-      become_user: ubuntu
-      ignore_errors: true
+    # - name: Démarrer les conteneurs
+    #   shell: |
+    #     cd /home/ubuntu/monitoring
+    #     docker-compose up -d
+    #   become_user: ubuntu
+    #   ignore_errors: true

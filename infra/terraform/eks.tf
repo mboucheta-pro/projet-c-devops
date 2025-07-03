@@ -14,7 +14,7 @@ module "eks" {
   cluster_endpoint_public_access  = true
 
   # Node groups optimisés pour les coûts
-  eks_managed_node_groups = var.instances_running ? {
+  eks_managed_node_groups = {
     workers = {
       desired_size = 2
       min_size     = 1
@@ -22,15 +22,6 @@ module "eks" {
 
       instance_types = ["t3a.medium"]
       capacity_type  = "SPOT" # Utilisation des instances Spot pour réduire les coûts
-    }
-  } : {
-    workers = {
-      desired_size = 0
-      min_size     = 0
-      max_size     = 3
-
-      instance_types = ["t3a.medium"]
-      capacity_type  = "SPOT"
     }
   }
 
