@@ -22,3 +22,14 @@ variable "db_username" {
   default     = "dbadmin"
   sensitive   = true
 }
+
+variable "github_token" {
+  description = "Token GitHub pour l'enregistrement du runner"
+  type        = string
+  sensitive   = true
+}
+
+variable "github_repo" {
+  description = "Repository GitHub (format: owner/repo)"
+  type        = string
+}

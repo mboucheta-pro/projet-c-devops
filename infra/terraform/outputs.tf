@@ -65,3 +65,13 @@ output "sonarqube_secret_arn" {
   value       = aws_secretsmanager_secret.sonarqube_admin.arn
   sensitive   = true
 }
+
+output "github_runner_ip" {
+  description = "Adresse IP privée du runner GitHub"
+  value       = aws_instance.github_runner.private_ip
+}
+
+output "github_runner_id" {
+  description = "ID de l'instance du runner GitHub"
+  value       = aws_instance.github_runner.id
+}
