@@ -64,17 +64,4 @@ output "sonarqube_secret_arn" {
   description = "ARN du secret contenant les credentials SonarQube"
   value       = aws_secretsmanager_secret.sonarqube_admin.arn
   sensitive   = true
-output "jenkins_private_ip" {
-  description = "IP privée de l'instance Jenkins"
-  value       = aws_instance.jenkins.private_ip
-}
-
-output "sonarqube_private_ip" {
-  description = "IP privée de l'instance SonarQube"
-  value       = aws_instance.sonarqube.private_ip
-}
-
-output "monitoring_private_ip" {
-  description = "IP privée de l'instance Monitoring"
-  value       = aws_instance.monitoring.private_ip
 }
