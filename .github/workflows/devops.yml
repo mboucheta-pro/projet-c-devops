@@ -16,23 +16,22 @@ env:
   TF_BACKEND_BUCKET: projet-c-terraform-state
 
 jobs:
-  setup-backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # setup-backend:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
       
-      - uses: ./.github/actions/setup-terraform
-        with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+  #     - uses: ./.github/actions/setup-terraform
+  #       with:
+  #         aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
-      - name: Check and Create Backend Resources
-        run: |
-          cd $GITHUB_WORKSPACE/infra/terraform-backend
-          terraform init
-          terraform apply -auto-approve
+  #     - name: Check and Create Backend Resources
+  #       run: |
+  #         cd $GITHUB_WORKSPACE/infra/terraform-backend
+  #         terraform init
+  #         terraform apply -auto-approve
   
   terraform-deploy:
-    needs: setup-backend
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'deploy'
     steps:
@@ -65,7 +64,6 @@ jobs:
           retention-days: 7
 
   terraform-destroy:
-    needs: setup-backend
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'destroy'
     steps:
