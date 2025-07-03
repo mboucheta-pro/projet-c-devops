@@ -1,0 +1,73 @@
+name: Configure Infrastructure with Ansible
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to configure'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - staging
+        - prod
+
+jobs:
+  configure:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      run: |
+        echo "${{ secrets.AWS_CREDENTIALS_BASE64 }}" | base64 -d > aws-credentials.json
+        export AWS_ACCESS_KEY_ID=$(cat aws-credentials.json | jq -r '.aws_access_key_id')
+        export AWS_SECRET_ACCESS_KEY=$(cat aws-credentials.json | jq -r '.aws_secret_access_key')
+        echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
+        echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
+        rm aws-credentials.json
+    
+    - name: Get Terraform outputs
+      run: |
+        cd infra/terraform
+        JENKINS_IP=$(terraform output -raw jenkins_private_ip) JENKINS_IP=$(jq -r '.jenkins_ip.value' $GITHUB_WORKSPACE/terraform-outputs.json)
+        SONARQUBE_IP=$(terraform output -raw sonarqube_private_ip)
+        MONITORING_IP=$(terraform output -raw monitoring_private_ip)
+        echo "JENKINS_IP=$JENKINS_IP" >> $GITHUB_ENV
+        echo "SONARQUBE_IP=$SONARQUBE_IP" >> $GITHUB_ENV
+        echo "MONITORING_IP=$MONITORING_IP" >> $GITHUB_ENV
+    
+    - name: Create dynamic inventory
+      run: |
+        cd infra/ansible
+        cat > inventory-dynamic.yml << EOF
+        all:
+          children:
+            jenkins:
+              hosts:
+                jenkins-server:
+                  ansible_host: ${{ env.JENKINS_IP }}
+                  ansible_user: ubuntu
+                  ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
+                  ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+            sonarqube:
+              hosts:
+                sonarqube-server:
+                  ansible_host: ${{ env.SONARQUBE_IP }}
+                  ansible_user: ubuntu
+                  ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
+                  ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+            monitoring:
+              hosts:
+                monitoring-server:
+                  ansible_host: ${{ env.MONITORING_IP }}
+                  ansible_user: ubuntu
+                  ansible_ssh_private_key_file: ~/.ssh/projet-c.pem
+                  ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+        EOF
+    
+    - name: Run Ansible playbook
+      run: |
+        cd infra/ansible
+        ansible-playbook -i inventory-dynamic.yml playbook.yml
