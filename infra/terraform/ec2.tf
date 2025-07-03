@@ -73,6 +73,7 @@ resource "aws_instance" "monitoring" {
 resource "aws_secretsmanager_secret" "jenkins_admin" {
   name = "${var.project}/jenkins/admin"
   description = "Credentials admin pour Jenkins"
+  recovery_window_in_days = 0
   tags = local.tags
 }
 
@@ -93,6 +94,7 @@ resource "random_password" "jenkins_admin" {
 resource "aws_secretsmanager_secret" "sonarqube_admin" {
   name = "${var.project}/sonarqube/admin"
   description = "Credentials admin pour SonarQube"
+  recovery_window_in_days = 0
   tags = local.tags
 }
 

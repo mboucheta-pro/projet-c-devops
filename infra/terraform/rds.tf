@@ -15,6 +15,7 @@ resource "aws_db_subnet_group" "default" {
 resource "aws_secretsmanager_secret" "db_credentials" {
   name = "${var.project}/rds/credentials"
   description = "Credentials pour la base de données RDS"
+  recovery_window_in_days = 0
   tags = local.tags
 }
 
