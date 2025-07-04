@@ -5,3 +5,4 @@ projet-c.code-workspace
 .terraform*
 *.tfstate*
 *.tfvars
+scripts

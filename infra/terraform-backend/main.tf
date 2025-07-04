@@ -1,5 +1,13 @@
 provider "aws" {
   region = var.region
+
+  default_tags {
+    tags = {
+      Project   = var.project
+      ManagedBy = "Terraform"
+      student   = "mohamed"
+    }
+  }
 }
 
 # Bucket S3 pour le backend Terraform

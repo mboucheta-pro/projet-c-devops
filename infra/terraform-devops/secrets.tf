@@ -21,8 +21,9 @@ resource "random_password" "database" {
 
 # Secrets AWS avec mots de passe générés automatiquement
 resource "aws_secretsmanager_secret" "jenkins_credentials" {
-  name        = "${var.project}-jenkins-credentials"
-  description = "Credentials pour Jenkins"
+  name                    = "${var.project}-jenkins-credentials"
+  description             = "Credentials pour Jenkins"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "jenkins_credentials" {
@@ -34,8 +35,9 @@ resource "aws_secretsmanager_secret_version" "jenkins_credentials" {
 }
 
 resource "aws_secretsmanager_secret" "gitlab_credentials" {
-  name        = "${var.project}-gitlab-credentials"
-  description = "Credentials pour GitLab"
+  name                    = "${var.project}-gitlab-credentials"
+  description             = "Credentials pour GitLab"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "gitlab_credentials" {
@@ -47,8 +49,9 @@ resource "aws_secretsmanager_secret_version" "gitlab_credentials" {
 }
 
 resource "aws_secretsmanager_secret" "sonarqube_credentials" {
-  name        = "${var.project}-sonarqube-credentials"
-  description = "Credentials pour SonarQube"
+  name                    = "${var.project}-sonarqube-credentials"
+  description             = "Credentials pour SonarQube"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "sonarqube_credentials" {
@@ -60,8 +63,9 @@ resource "aws_secretsmanager_secret_version" "sonarqube_credentials" {
 }
 
 resource "aws_secretsmanager_secret" "database_credentials" {
-  name        = "${var.project}-database-credentials"
-  description = "Credentials pour la base de données"
+  name                    = "${var.project}-database-credentials"
+  description             = "Credentials pour la base de données"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "database_credentials" {

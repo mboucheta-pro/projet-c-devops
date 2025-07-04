@@ -5,6 +5,7 @@ provider "aws" {
     tags = {
       Project   = var.project
       ManagedBy = "Terraform"
+      student   = "mohamed"
     }
   }
 }
