@@ -36,7 +36,8 @@ resource "aws_iam_role_policy" "github_runner" {
           aws_secretsmanager_secret.gitlab_credentials.arn,
           aws_secretsmanager_secret.sonarqube_credentials.arn,
           aws_secretsmanager_secret.database_credentials.arn,
-          aws_secretsmanager_secret.github_credentials.arn
+          data.aws_secretsmanager_secret.github_runner_token.arn,
+          data.aws_secretsmanager_secret.ssh_private_key.arn
         ]
       }
     ]
@@ -93,7 +94,8 @@ resource "aws_iam_role_policy" "cicd_instances" {
           aws_secretsmanager_secret.gitlab_credentials.arn,
           aws_secretsmanager_secret.sonarqube_credentials.arn,
           aws_secretsmanager_secret.database_credentials.arn,
-          aws_secretsmanager_secret.github_credentials.arn
+          data.aws_secretsmanager_secret.github_runner_token.arn,
+          data.aws_secretsmanager_secret.ssh_private_key.arn
         ]
       }
     ]

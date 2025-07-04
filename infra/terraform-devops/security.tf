@@ -4,12 +4,12 @@ resource "aws_security_group" "infra_instances" {
   description = "Security group for CI/CD instances in VPC Infra"
   vpc_id      = aws_vpc.infra.id
 
-  # SSH
+  # SSH - Restreindre aux VPC internes et plages IP spécifiques
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_infra_cidr, var.vpc_app_cidr]
   }
 
   # Jenkins

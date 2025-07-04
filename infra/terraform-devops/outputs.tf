@@ -98,9 +98,14 @@ output "database_secret_arn" {
   value       = aws_secretsmanager_secret.database_credentials.arn
 }
 
-output "github_secret_arn" {
-  description = "ARN du secret GitHub"
-  value       = aws_secretsmanager_secret.github_credentials.arn
+output "github_runner_token_arn" {
+  description = "ARN du secret GitHub Runner Token"
+  value       = data.aws_secretsmanager_secret.github_runner_token.arn
+}
+
+output "ssh_private_key_arn" {
+  description = "ARN du secret SSH Private Key"
+  value       = data.aws_secretsmanager_secret.ssh_private_key.arn
 }
 
 # RDS Outputs
@@ -117,4 +122,29 @@ output "rds_port" {
 output "database_name" {
   description = "Nom de la base de données"
   value       = aws_db_instance.main.db_name
+}
+
+# Mots de passe générés automatiquement (sensibles)
+output "jenkins_admin_password" {
+  description = "Mot de passe administrateur Jenkins généré automatiquement"
+  value       = random_password.jenkins_admin.result
+  sensitive   = true
+}
+
+output "gitlab_root_password" {
+  description = "Mot de passe root GitLab généré automatiquement"
+  value       = random_password.gitlab_root.result
+  sensitive   = true
+}
+
+output "sonarqube_admin_password" {
+  description = "Mot de passe administrateur SonarQube généré automatiquement"
+  value       = random_password.sonarqube_admin.result
+  sensitive   = true
+}
+
+output "database_password" {
+  description = "Mot de passe de la base de données généré automatiquement"
+  value       = random_password.database.result
+  sensitive   = true
 }

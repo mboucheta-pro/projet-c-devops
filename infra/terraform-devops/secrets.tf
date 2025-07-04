@@ -1,4 +1,25 @@
-# Secrets AWS pour les credentials
+# Génération automatique des mots de passe
+resource "random_password" "jenkins_admin" {
+  length  = 16
+  special = true
+}
+
+resource "random_password" "gitlab_root" {
+  length  = 16
+  special = true
+}
+
+resource "random_password" "sonarqube_admin" {
+  length  = 16
+  special = true
+}
+
+resource "random_password" "database" {
+  length  = 16
+  special = true
+}
+
+# Secrets AWS avec mots de passe générés automatiquement
 resource "aws_secretsmanager_secret" "jenkins_credentials" {
   name        = "${var.project}-jenkins-credentials"
   description = "Credentials pour Jenkins"
@@ -8,7 +29,7 @@ resource "aws_secretsmanager_secret_version" "jenkins_credentials" {
   secret_id = aws_secretsmanager_secret.jenkins_credentials.id
   secret_string = jsonencode({
     admin_username = "admin"
-    admin_password = var.jenkins_admin_password
+    admin_password = random_password.jenkins_admin.result
   })
 }
 
@@ -21,7 +42,7 @@ resource "aws_secretsmanager_secret_version" "gitlab_credentials" {
   secret_id = aws_secretsmanager_secret.gitlab_credentials.id
   secret_string = jsonencode({
     root_username = "root"
-    root_password = var.gitlab_root_password
+    root_password = random_password.gitlab_root.result
   })
 }
 
@@ -34,7 +55,7 @@ resource "aws_secretsmanager_secret_version" "sonarqube_credentials" {
   secret_id = aws_secretsmanager_secret.sonarqube_credentials.id
   secret_string = jsonencode({
     admin_username = "admin"
-    admin_password = var.sonarqube_admin_password
+    admin_password = random_password.sonarqube_admin.result
   })
 }
 
@@ -47,22 +68,27 @@ resource "aws_secretsmanager_secret_version" "database_credentials" {
   secret_id = aws_secretsmanager_secret.database_credentials.id
   secret_string = jsonencode({
     username = var.db_username
-    password = var.db_password
+    password = random_password.database.result
     endpoint = aws_db_instance.main.endpoint
     port     = aws_db_instance.main.port
     database = aws_db_instance.main.db_name
   })
 }
 
-resource "aws_secretsmanager_secret" "github_credentials" {
-  name        = "${var.project}-github-credentials"
-  description = "Credentials pour GitHub"
+# Référence au secret AWS existant pour le token GitHub Runner
+data "aws_secretsmanager_secret" "github_runner_token" {
+  name = "GITHUB_RUNNER_TOKEN"
 }
 
-resource "aws_secretsmanager_secret_version" "github_credentials" {
-  secret_id = aws_secretsmanager_secret.github_credentials.id
-  secret_string = jsonencode({
-    token = var.github_token
-    repo  = var.github_repo
-  })
+data "aws_secretsmanager_secret_version" "github_runner_token" {
+  secret_id = data.aws_secretsmanager_secret.github_runner_token.id
+}
+
+# Référence au secret AWS existant pour la clé SSH privée
+data "aws_secretsmanager_secret" "ssh_private_key" {
+  name = "SSH_PRIVATE_KEY"
+}
+
+data "aws_secretsmanager_secret_version" "ssh_private_key" {
+  secret_id = data.aws_secretsmanager_secret.ssh_private_key.id
 }

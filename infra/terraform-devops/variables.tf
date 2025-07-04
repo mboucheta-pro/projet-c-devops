@@ -26,33 +26,9 @@ variable "ubuntu_ami" {
 }
 
 # Configuration CI/CD
-variable "github_token" {
-  description = "Token GitHub pour l'enregistrement du runner"
-  type        = string
-  sensitive   = true
-}
-
 variable "github_repo" {
   description = "Repository GitHub (format: owner/repo)"
   type        = string
-}
-
-variable "jenkins_admin_password" {
-  description = "Mot de passe administrateur Jenkins"
-  type        = string
-  sensitive   = true
-}
-
-variable "gitlab_root_password" {
-  description = "Mot de passe root GitLab"
-  type        = string
-  sensitive   = true
-}
-
-variable "sonarqube_admin_password" {
-  description = "Mot de passe administrateur SonarQube"
-  type        = string
-  sensitive   = true
 }
 
 variable "db_username" {
@@ -60,10 +36,4 @@ variable "db_username" {
   type        = string
   sensitive   = true
   default     = "admin"
-}
-
-variable "db_password" {
-  description = "Mot de passe de la base de données"
-  type        = string
-  sensitive   = true
 }
