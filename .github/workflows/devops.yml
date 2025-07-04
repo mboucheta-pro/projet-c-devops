@@ -28,7 +28,7 @@ jobs:
       
       - name: Plan and Apply Terraform
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
+          cd $GITHUB_WORKSPACE/infra/terraform-devops
           terraform init
           
           # Plan and Apply
@@ -56,7 +56,7 @@ jobs:
             
       - name: Execute Terraform Destroy
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
+          cd $GITHUB_WORKSPACE/infra/terraform-devops
           terraform init
           sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
           terraform destroy -auto-approve
