@@ -76,3 +76,45 @@ output "vpc_peering_connection_id" {
   description = "ID de la connexion VPC Peering"
   value       = aws_vpc_peering_connection.infra_to_app.id
 }
+
+# Secrets ARNs
+output "jenkins_secret_arn" {
+  description = "ARN du secret Jenkins"
+  value       = aws_secretsmanager_secret.jenkins_credentials.arn
+}
+
+output "gitlab_secret_arn" {
+  description = "ARN du secret GitLab"
+  value       = aws_secretsmanager_secret.gitlab_credentials.arn
+}
+
+output "sonarqube_secret_arn" {
+  description = "ARN du secret SonarQube"
+  value       = aws_secretsmanager_secret.sonarqube_credentials.arn
+}
+
+output "database_secret_arn" {
+  description = "ARN du secret base de données"
+  value       = aws_secretsmanager_secret.database_credentials.arn
+}
+
+output "github_secret_arn" {
+  description = "ARN du secret GitHub"
+  value       = aws_secretsmanager_secret.github_credentials.arn
+}
+
+# RDS Outputs
+output "rds_endpoint" {
+  description = "Endpoint de la base de données RDS"
+  value       = aws_db_instance.main.endpoint
+}
+
+output "rds_port" {
+  description = "Port de la base de données RDS"
+  value       = aws_db_instance.main.port
+}
+
+output "database_name" {
+  description = "Nom de la base de données"
+  value       = aws_db_instance.main.db_name
+}

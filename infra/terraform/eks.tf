@@ -1,11 +1,11 @@
 # Cluster EKS dans VPC App
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 18.0"
+  version = "~> 19.0"
 
   cluster_name    = "${var.project}-eks"
-  cluster_version = "1.27"
-  
+  cluster_version = "1.28"
+
   vpc_id     = aws_vpc.app.id
   subnet_ids = aws_subnet.app_private[*].id
 
@@ -20,6 +20,8 @@ module "eks" {
 
       instance_types = ["t3a.medium"]
       capacity_type  = "SPOT"
+
+      subnet_ids = aws_subnet.app_private[*].id
     }
   }
 
