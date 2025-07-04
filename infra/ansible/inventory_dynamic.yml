@@ -1,0 +1,14 @@
+all:
+  vars:
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: "./projet-c-key.pem"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    github_account: "mboucheta-pro"
+    github_repo: "projet-c-devops"
+    github_runner_token: "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"
+
+  children:
+    github_runners:
+      hosts:
+        github-runner:
+          ansible_host: "15.156.206.126"

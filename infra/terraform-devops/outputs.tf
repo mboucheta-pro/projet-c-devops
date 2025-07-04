@@ -26,6 +26,11 @@ output "vpc_app_public_subnets" {
 }
 
 # CI/CD Infrastructure Outputs
+output "github_repo" {
+  description = "Repository GitHub (format: owner/repo)"
+  value       = var.github_repo
+}
+
 output "github_runner_ip" {
   description = "Adresse IP publique du runner GitHub"
   value       = aws_instance.github_runner.public_ip
@@ -147,4 +152,9 @@ output "database_password" {
   description = "Mot de passe de la base de données généré automatiquement"
   value       = random_password.database.result
   sensitive   = true
+}
+
+output "github_account" {
+  description = "Nom du compte GitHub"
+  value       = split("/", var.github_repo)[0]
 }

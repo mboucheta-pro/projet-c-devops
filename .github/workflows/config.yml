@@ -1,24 +1,58 @@
-name: Coonfiguration avec Ansible
+name: Configuration avec Ansible
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action à effectuer'
+        required: true
+        default: 'deploy-github-runner'
+        type: choice
+        options:
+          - deploy-github-runner
+          - configure-all
 
 jobs:
-  ansible-deploy:
-    runs-on: self-hosted
+  deploy-github-runner:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy-github-runner'
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup SSH key
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Install dependencies
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          sudo apt-get update
+          sudo apt-get install -y ansible jq
           
-      - name: Run Ansible Playbook
+      - name: Deploy GitHub Runner
+        run: |
+          chmod +x scripts/deploy_github_runner.sh
+          ./scripts/deploy_github_runner.sh
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+  
+  configure-all:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'configure-all'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible jq
+          
+      - name: Configure all services
         run: |
           cd infra/ansible
-          ansible-playbook -i inventory/${{ github.event.inputs.environment }}.yml \
-            playbook.yml
+          ansible-playbook -i hosts.yml playbook.yml
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
