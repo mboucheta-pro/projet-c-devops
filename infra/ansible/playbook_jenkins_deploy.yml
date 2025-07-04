@@ -1,0 +1,21 @@
+---
+- name: Configuration de Jenkins
+  hosts: jenkins
+  become: true
+  vars:
+    java_packages:
+      - openjdk-21-jdk
+    jenkins_admin_username: admin
+    jenkins_plugins:
+      - git
+      - workflow-aggregator
+      - pipeline-stage-view
+      - docker-workflow
+      - kubernetes
+      - blueocean
+      - github
+    jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
+    jenkins_http_port: 8080
+  roles:
+    - role: geerlingguy.java
+    - role: geerlingguy.jenkins

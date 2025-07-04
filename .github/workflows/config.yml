@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - deploy-github-runner
+          - deploy-jenkins
           - configure-all
 
 jobs:
@@ -32,6 +33,28 @@ jobs:
         run: |
           chmod +x scripts/deploy_github_runner.sh
           ./scripts/deploy_github_runner.sh
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+  
+  deploy-jenkins:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy-jenkins'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible jq
+          
+      - name: Deploy Jenkins
+        run: |
+          chmod +x scripts/deploy_jenkins.sh
+          ./scripts/deploy_jenkins.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
   

@@ -1,0 +1,30 @@
+---
+- name: Désinstallation de Jenkins et Java
+  hosts: jenkins
+  become: true
+  tasks:
+    - name: Désinstaller Jenkins
+      apt:
+        name: jenkins
+        state: absent
+        purge: yes
+        update_cache: yes
+
+    - name: Supprimer le dossier Jenkins
+      file:
+        path: /var/lib/jenkins
+        state: absent
+
+    - name: Supprimer la configuration Jenkins
+      file:
+        path: /etc/default/jenkins
+        state: absent
+
+    - name: Désinstaller Java 21
+      apt:
+        name:
+          - openjdk-21-jdk
+          - openjdk-21-jre
+        state: absent
+        purge: yes
+        update_cache: yes

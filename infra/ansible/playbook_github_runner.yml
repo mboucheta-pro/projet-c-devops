@@ -15,3 +15,20 @@
           - x64
           - aws
         runner_group: default
+
+- name: Configuration de Jenkins
+  hosts: jenkins
+  become: true
+  vars:
+    jenkins_admin_username: admin
+    jenkins_admin_password: "{{ jenkins_admin_password }}"
+    jenkins_plugins:
+      - git
+      - workflow-aggregator
+      - pipeline-stage-view
+      - docker-workflow
+      - kubernetes
+      - blueocean
+    jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
+  roles:
+    - role: geerlingguy.jenkins
