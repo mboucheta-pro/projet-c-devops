@@ -11,7 +11,6 @@ module "eks" {
 
   cluster_endpoint_private_access = true
   cluster_endpoint_public_access  = true
-  cluster_endpoint_public_access_cidrs = [var.vpc_infra_cidr]
 
   cluster_addons = {
     coredns = {
