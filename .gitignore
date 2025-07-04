@@ -3,3 +3,5 @@ projet-c.code-workspace
 .DS_Store
 *.pem
 .terraform*
+*.tfstate*
+*.tfvars
