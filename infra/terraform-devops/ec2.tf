@@ -18,12 +18,6 @@ resource "aws_instance" "github_runner" {
     volume_type = "gp3"
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data/github-runner.sh", {
-    github_token = var.github_token
-    github_repo  = var.github_repo
-    runner_name  = "${var.project}-runner-${random_id.runner_suffix.hex}"
-  }))
-
   tags = {
     Name = "${var.project}-github-runner"
   }
