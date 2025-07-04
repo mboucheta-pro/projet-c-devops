@@ -1,4 +1,4 @@
-name: Gestion de l'infrastructure DevOps
+name: Gestion de l'infra DevOps
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       action:
         description: 'Action à effectuer'
         required: true
-        default: 'deploy'
+        default: 'devops-create'
         type: choice
         options:
-          - deploy
-          - destroy
+          - devops-create
+          - devops-destroy
 
 env:
   TF_BACKEND_BUCKET: projet-c-terraform-state

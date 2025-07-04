@@ -1,16 +1,7 @@
-name: Deploy with Ansible
+name: Coonfiguration avec Ansible
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
 
 jobs:
   ansible-deploy:

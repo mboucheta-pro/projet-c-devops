@@ -1,4 +1,4 @@
-name: Gestion du backend projet-c
+name: Gestion du backend
 
 on:
   workflow_dispatch:
