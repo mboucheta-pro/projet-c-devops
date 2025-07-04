@@ -12,10 +12,16 @@ variable "region" {
 }
 
 # Configuration réseau
-variable "vpc_cidr" {
-  description = "CIDR du VPC"
+variable "vpc_infra_cidr" {
+  description = "CIDR du VPC Infrastructure CI/CD"
   type        = string
-  default     = "10.0.0.0/16"
+  default     = "10.1.0.0/16"
+}
+
+variable "vpc_app_cidr" {
+  description = "CIDR du VPC Application (EKS)"
+  type        = string
+  default     = "10.2.0.0/16"
 }
 
 variable "ubuntu_ami" {
