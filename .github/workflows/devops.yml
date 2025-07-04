@@ -16,9 +16,9 @@ env:
   TF_BACKEND_BUCKET: projet-c-terraform-state
 
 jobs:
-  terraform-deploy:
+  devops-create:
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'deploy'
+    if: github.event.inputs.action == 'devops-create'
     steps:
       - uses: actions/checkout@v4
 
@@ -44,9 +44,9 @@ jobs:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
           
-  terraform-destroy:
+  devops-destroy:
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
+    if: github.event.inputs.action == 'devops-destroy'
     steps:
       - uses: actions/checkout@v4
 
