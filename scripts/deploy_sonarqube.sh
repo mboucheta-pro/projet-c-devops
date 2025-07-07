@@ -1,22 +1,17 @@
 #!/bin/bash
 
 # Récupérer les outputs Terraform
-cd $GITHUB_WORKSPACE/infra/terraform
-export SONAR_IP=$(terraform output -raw sonarqube_ip)
+export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
+export SONARQUBE_ADMIN_USERNAME=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_username')
+SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
 
-# Récupérer les credentials Jenkins et la clé SSH depuis AWS Secrets Manager
-export SONARQUBE_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
-export SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
-
-# Créer le fichier de clé SSH temporaire
+# Initaliser l'agent ssh
 cd $GITHUB_WORKSPACE/infra/ansible
-SSH_KEY_FILE=./projet-c-key.pem
-echo "$SSH_PRIVATE_KEY" > $SSH_KEY_FILE
-chmod 600 $SSH_KEY_FILE
-
+eval "$(ssh-agent -s)"
+ssh-add <(echo "$SSH_PRIVATE_KEY")
 
 # Créer le fichier d'inventaire avec les IPs réelles
-cat > inventory_sonar.yml << EOF
+cat > inventory_jenkins.yml << EOF
 all:
 vars:
     ansible_user: ubuntu
@@ -28,10 +23,10 @@ children:
         sonar-server:
         ansible_host: "$SONAR_IP"
 EOF
-
+cat inventory_jenkins.yml 
 ansible-playbook -i inventory_sonar.yml sonarqube-playbook.yml
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml
-rm -f $SSH_KEY_FILE
+
 echo "Déploiement Sonarqube terminé"

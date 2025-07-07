@@ -31,7 +31,7 @@ all:
         jenkins-agent:
           ansible_host: "${JENKINS_AGENT_IP}"
 EOF
-cat inventory_jenkins_agent.yml
+
 # Déployer l'agent Jenkins
 ansible-playbook -i inventory_jenkins_agent.yml jenkins-agent-playbook.yml -v
 

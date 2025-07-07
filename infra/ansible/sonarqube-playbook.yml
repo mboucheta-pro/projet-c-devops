@@ -4,6 +4,7 @@
   become: true
   vars:
     sonarqube_admin_password: "{{ lookup('env', 'SONARQUBE_ADMIN_PASSWORD') }}"
+    sonarqube_admin_username: "{{ lookup('env', 'SONARQUBE_ADMIN_USERNAME') }}"
   
   tasks:
     - name: Install Docker
