@@ -21,7 +21,7 @@ variable "vpc_infra_cidr" {
 variable "ubuntu_ami" {
   description = "AMI Ubuntu 24.04 LTS"
   type        = string
-  default = "ami-0083d3f8b2a6c7a81"  # Ubuntu 24.04 LTS ca-central-1
+  default = "ami-0c0a551d0459e9d39"  # Ubuntu 24.04 LTS ca-central-1
 }
 
 variable "tf_backend_bucket" {
