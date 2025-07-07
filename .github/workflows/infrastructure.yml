@@ -1,0 +1,132 @@
+name: Infrastructure DevOps
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action à effectuer'
+        required: true
+        default: 'create'
+        type: choice
+        options:
+          - create
+          - update
+          - destroy
+      confirm:
+        description: 'Confirmer action (requis pour update/destroy)'
+        required: false
+        type: boolean
+        default: false
+      configure:
+        description: 'Configurer les services après création'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TF_BACKEND_BUCKET: projet-c-terraform-state-devops
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'create'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Deploy Infrastructure
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform validate
+          terraform plan -out="tfplan"
+          terraform apply -auto-approve tfplan
+          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
+      
+      - name: Upload Terraform Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}/terraform-outputs.json
+
+      - name: Install Ansible
+        if: github.event.inputs.configure == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible jq
+
+      - name: Configure Services
+        if: github.event.inputs.configure == 'true'
+        run: |
+          chmod +x scripts/deploy_jenkins.sh
+          chmod +x scripts/deploy_jenkins_agent.sh
+          ./scripts/deploy_jenkins.sh
+          ./scripts/deploy_jenkins_agent.sh
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+
+  update:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'update'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Plan Infrastructure Changes
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform validate
+          terraform plan -out="tfplan"
+      
+      - name: Apply Changes
+        if: github.event.inputs.confirm == 'true'
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform apply -auto-approve tfplan
+          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
+      
+      - name: Confirmation Required
+        if: github.event.inputs.confirm != 'true'
+        run: |
+          echo "❌ Confirmation requise pour appliquer les changements"
+          echo "Relancez le workflow avec 'confirm: true'"
+          exit 1
+
+      - name: Upload Terraform Outputs
+        if: github.event.inputs.confirm == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}/terraform-outputs.json
+
+  destroy:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Confirmation Required
+        if: github.event.inputs.confirm != 'true'
+        run: |
+          echo "❌ Confirmation requise pour détruire l'infrastructure"
+          echo "Relancez le workflow avec 'confirm: true'"
+          exit 1
+            
+      - name: Destroy Infrastructure
+        if: github.event.inputs.confirm == 'true'
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
+          terraform destroy -auto-approve

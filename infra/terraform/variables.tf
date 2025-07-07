@@ -26,10 +26,7 @@ variable "ubuntu_ami" {
 }
 
 # Configuration CI/CD
-variable "github_repo" {
-  description = "Repository GitHub (format: owner/repo)"
-  type        = string
-}
+
 
 
 
@@ -43,15 +40,3 @@ variable "tf_backend_dynamodb" {
   type        = string
 }
 
-# Variables spécifiques DevOps
-variable "github_token_secret_name" {
-  description = "Nom du secret contenant le token GitHub"
-  type        = string
-  default     = "github-runner-token"
-}
-
-variable "ssh_key_secret_name" {
-  description = "Nom du secret contenant la clé SSH privée"
-  type        = string
-  default     = "ssh-private-key"
-}

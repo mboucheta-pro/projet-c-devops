@@ -1,15 +1,18 @@
-# VPC Infrastructure DevOps
+# =============================================================================
+# VPC INFRA - Pour les outils CI/CD
+# =============================================================================
+
 resource "aws_vpc" "infra" {
   cidr_block           = var.vpc_infra_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
 
   tags = {
-    Name = "${var.project}-vpc-infra"
+    Name = "vpc-infra"
   }
 }
 
-# Subnets publics VPC Infra
+# Sous-réseaux publics VPC Infra
 resource "aws_subnet" "infra_public" {
   count                   = 2
   vpc_id                  = aws_vpc.infra.id
@@ -18,7 +21,7 @@ resource "aws_subnet" "infra_public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.project}-infra-public-${count.index + 1}"
+    Name = "vpc-infra-public-${count.index + 1}"
   }
 }
 
@@ -27,7 +30,7 @@ resource "aws_internet_gateway" "infra" {
   vpc_id = aws_vpc.infra.id
 
   tags = {
-    Name = "${var.project}-infra-igw"
+    Name = "vpc-infra-igw"
   }
 }
 
@@ -40,12 +43,17 @@ resource "aws_route_table" "infra_public" {
     gateway_id = aws_internet_gateway.infra.id
   }
 
+  route {
+    cidr_block                = var.vpc_app_cidr
+    vpc_peering_connection_id = aws_vpc_peering_connection.infra_to_app.id
+  }
+
   tags = {
-    Name = "${var.project}-infra-public-rt"
+    Name = "vpc-infra-public-rt"
   }
 }
 
-# Association subnets publics VPC Infra
+# Association sous-réseaux publics VPC Infra
 resource "aws_route_table_association" "infra_public" {
   count          = 2
   subnet_id      = aws_subnet.infra_public[count.index].id
