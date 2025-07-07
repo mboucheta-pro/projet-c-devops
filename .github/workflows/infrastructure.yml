@@ -111,7 +111,7 @@ jobs:
                     ansible_host: "$SONAR_IP"
           EOF
           
-          export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
+          export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-mohamed-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
           ansible-playbook -i inventory_sonar.yml sonarqube-playbook.yml
           rm -f inventory_sonar.yml
         env:

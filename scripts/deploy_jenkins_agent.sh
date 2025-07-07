@@ -7,7 +7,7 @@ JENKINS_IP=$(terraform output -raw jenkins_ip)
 JENKINS_AGENT_IP=$(terraform output -raw jenkins_agent_ip)
 
 # Récupérer les credentials Jenkins et la clé SSH depuis AWS Secrets Manager
-JENKINS_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
+JENKINS_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
 SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
 
 # Créer le fichier de clé SSH temporaire

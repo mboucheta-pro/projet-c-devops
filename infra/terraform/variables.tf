@@ -2,7 +2,7 @@
 variable "project" {
   description = "Nom du projet"
   type        = string
-  default = "projet-c-mohamed"
+  default = "projet-c-devops"
 }
 
 variable "region" {
