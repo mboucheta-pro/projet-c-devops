@@ -6,7 +6,7 @@ resource "random_password" "jenkins_admin" {
 
 resource "random_password" "sonarqube_admin" {
   length  = 16
-  special = true
+  special = false
 }
 
 # Secrets AWS avec mots de passe générés automatiquement

@@ -63,6 +63,37 @@
         group: "{{ jenkins_agent_user }}"
         mode: '0755'
 
+    - name: Créer le service systemd pour l'agent Jenkins
+      copy:
+        dest: /etc/systemd/system/jenkins-agent.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Jenkins Agent
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=jenkins
+          WorkingDirectory={{ jenkins_agent_home }}/agent
+          ExecStart={{ jenkins_agent_home }}/start-agent.sh
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Recharger systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Activer et démarrer le service jenkins-agent
+      systemd:
+        name: jenkins-agent
+        enabled: yes
+        state: started
+
     - name: Vérifier le statut de l'agent sur Jenkins
       uri:
         url: "{{ jenkins_master_url }}/computer/jenkins-agent/api/json"
@@ -74,18 +105,6 @@
       register: agent_status
       retries: 3
       delay: 5
-
-    - name: Démarrer immédiatement l'agent Jenkins
-      shell: "{{ jenkins_agent_home }}/start-agent.sh &"
-      args:
-        executable: /bin/bash
-
-    - name: Ajouter une tâche cron pour démarrer l'agent Jenkins au reboot
-      cron:
-        name: "Start Jenkins agent on reboot"
-        user: "{{ jenkins_agent_user }}"
-        special_time: reboot
-        job: "{{ jenkins_agent_home }}/start-agent.sh"
 
     - name: Afficher le statut de l'agent
       debug:
