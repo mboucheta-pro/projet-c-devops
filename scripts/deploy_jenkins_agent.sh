@@ -1,14 +1,20 @@
 #!/bin/bash
+set -euo pipefail
 
 # Récupérer les credentials Jenkins et la clé SSH depuis AWS Secrets Manager
 export JENKINS_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
 export JENKINS_ADMIN_USERNAME=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_username')
 SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
 
+# Écrire la clé privée dans un fichier temporaire avec permissions sécurisées
+SSH_KEY_FILE=$(mktemp)
+echo "$SSH_PRIVATE_KEY" > "$SSH_KEY_FILE"
+chmod 600 "$SSH_KEY_FILE"
+
 # Initaliser l'agent ssh
 cd $GITHUB_WORKSPACE/infra/ansible
 eval "$(ssh-agent -s)"
-ssh-add <(echo "$SSH_PRIVATE_KEY")
+ssh-add "$SSH_KEY_FILE"
 
 # Créer le fichier d'inventaire avec les IPs réelles
 cat > inventory_jenkins_agent.yml << EOF
