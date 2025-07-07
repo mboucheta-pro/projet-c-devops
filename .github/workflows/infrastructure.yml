@@ -76,10 +76,10 @@ jobs:
         id: get_output
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
-          echo "JENKINS_IP=$(terraform output -raw jenkins_ip)" >> $GITHUB_ENV
-          echo "JENKINS_AGENT_IP=$(terraform output -raw jenkins_agent_ip)" >> $GITHUB_ENV
-          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip)" >> $GITHUB_ENV
-      
+          echo "JENKINS_IP=$(terraform output -raw jenkins_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')" >> $GITHUB_ENV
+          echo "JENKINS_AGENT_IP=$(terraform output -raw jenkins_agent_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')" >> $GITHUB_ENV
+          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}')" >> $GITHUB_ENV
+            
       # - name: Install Ansible
       #   if: github.event.inputs.configure_jenkins_master == 'true' || github.event.inputs.configure_jenkins_agent == 'true' || github.event.inputs.configure_sonarqube == 'true'
       #   run: |
