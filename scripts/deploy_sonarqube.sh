@@ -15,7 +15,6 @@ cat > inventory_sonarqube.yml << EOF
 all:
 vars:
     ansible_user: ubuntu
-    ansible_ssh_private_key_file: "$GITHUB_WORKSPACE/projet-c.pem"
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 children:
     sonarqube:
