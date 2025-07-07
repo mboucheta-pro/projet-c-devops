@@ -21,7 +21,7 @@ all:
     sonarqube:
       hosts:
         sonar-server:
-         ansible_host: "$SONARQUBE_IP"
+          ansible_host: "$SONARQUBE_IP"
 EOF
 cat inventory_sonarqube.yml 
 ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml
