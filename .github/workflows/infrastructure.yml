@@ -6,7 +6,7 @@ on:
       action:
         description: 'Action à effectuer'
         required: true
-        default: 'create'
+        default: 'configure'
         type: choice
         options:
           - create
