@@ -28,9 +28,6 @@ on:
         type: boolean
         default: false
 
-env:
-  TF_BACKEND_BUCKET: projet-c-terraform-state-devops
-
 jobs:
   create:
     runs-on: ubuntu-latest
@@ -41,7 +38,12 @@ jobs:
       - uses: ./.github/actions/setup-terraform
         with:
           aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-      
+
+      - name: Create S3 bucket for Terraform state
+        run: |
+          aws s3api create-bucket --bucket projet-c-terraform-state-devops --region ca-central-1 --create-bucket-configuration LocationConstraint=ca-central-1 || true
+          aws s3api put-bucket-versioning --bucket projet-c-terraform-state-devops --versioning-configuration Status=Enabled
+
       - name: Deploy Infrastructure
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
