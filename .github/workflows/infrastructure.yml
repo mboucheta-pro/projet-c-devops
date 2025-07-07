@@ -71,12 +71,20 @@ jobs:
           terraform validate
           terraform plan -out="tfplan"
           terraform apply -auto-approve tfplan
-      
-      - name: Install Ansible
-        if: github.event.inputs.configure_jenkins_master == 'true' || github.event.inputs.configure_jenkins_agent == 'true' || github.event.inputs.configure_sonarqube == 'true'
+
+      - name: Get IPs from Terraform output
+        id: get_output
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible jq
+          cd $GITHUB_WORKSPACE/infra/terraform
+          echo "JENKINS_IP=$(terraform output -raw jenkins_ip)" >> $GITHUB_ENV
+          echo "JENKINS_AGENT_IP=$(terraform output -raw jenkins_agent_ip)" >> $GITHUB_ENV
+          echo "SONARQUBE_IP=$(terraform output -raw sonarqube_ip)" >> $GITHUB_ENV
+      
+      # - name: Install Ansible
+      #   if: github.event.inputs.configure_jenkins_master == 'true' || github.event.inputs.configure_jenkins_agent == 'true' || github.event.inputs.configure_sonarqube == 'true'
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y ansible jq
 
       - name: Configure Jenkins master
         if: github.event.inputs.configure_jenkins_master == 'true'
@@ -85,6 +93,7 @@ jobs:
           ./scripts/deploy_jenkins.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
+          JENKINS_IP: ${{ env.JENKINS_IP }}
 
       - name: Configure Jenkins agent
         if: github.event.inputs.configure_jenkins_agent == 'true'
@@ -93,6 +102,7 @@ jobs:
           ./scripts/deploy_jenkins_agent.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
+          JENKINS_IP: ${{ env.JENKINS_AGENT_IP }}
 
       - name: Configure SonarQube
         if: github.event.inputs.configure_sonarqube == 'true'
@@ -101,7 +111,7 @@ jobs:
           ./scripts/deploy_sonarqube.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
-
+          SONARQUBE_IP: ${{ env.SONARQUBE_IP }}
   update:
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'update'
@@ -110,7 +120,7 @@ jobs:
 
       - uses: ./.github/actions/setup-terraform
         with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }} 
       
       - name: Plan Infrastructure Changes
         run: |
