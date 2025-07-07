@@ -94,27 +94,7 @@ jobs:
       - name: Configure SonarQube
         if: github.event.inputs.configure_sonar == 'true'
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
-          SONAR_IP=$(terraform output -raw sonarqube_ip)
-          
-          cd $GITHUB_WORKSPACE/infra/ansible
-          cat > inventory_sonar.yml << EOF
-          all:
-            vars:
-              ansible_user: ubuntu
-              ansible_ssh_private_key_file: "$GITHUB_WORKSPACE/projet-c.pem"
-              ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-            children:
-              sonarqube:
-                hosts:
-                  sonar-server:
-                    ansible_host: "$SONAR_IP"
-          EOF
-          
-          export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-mohamed-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
-          ansible-playbook -i inventory_sonar.yml sonarqube-playbook.yml
-          rm -f inventory_sonar.yml
-        env:
+       env:
           ANSIBLE_HOST_KEY_CHECKING: False
 
   update:
