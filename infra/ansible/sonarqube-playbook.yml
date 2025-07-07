@@ -7,6 +7,19 @@
     sonarqube_admin_username: "{{ lookup('env', 'SONARQUBE_ADMIN_USERNAME') }}"
   
   tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Activer NTP avec timedatectl
+      become: yes
+      ansible.builtin.command: timedatectl set-ntp true
+      changed_when: false
+
+    - name: Configurer la timezone sur Europe/Paris
+      timezone:
+        name: Europe/Paris
+
     - name: Install Docker
       apt:
         name: 
@@ -36,7 +49,7 @@
         mode: '0644'
 
     - name: Start SonarQube with docker-compose
-      shell: docker-compose up -d
+      shell: docker-compose -f /home/ubuntu/docker-compose.yml up -d
       args:
         chdir: /home/ubuntu
       become_user: ubuntu

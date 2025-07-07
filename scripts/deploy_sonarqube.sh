@@ -24,7 +24,7 @@ all:
           ansible_host: "$SONARQUBE_IP"
 EOF
 cat inventory_sonarqube.yml 
-ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml
+ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml -v
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml
