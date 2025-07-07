@@ -75,6 +75,11 @@
       retries: 3
       delay: 5
 
+    - name: Démarrer immédiatement l'agent Jenkins
+      shell: "{{ jenkins_agent_home }}/start-agent.sh &"
+      args:
+        executable: /bin/bash
+
     - name: Ajouter une tâche cron pour démarrer l'agent Jenkins au reboot
       cron:
         name: "Start Jenkins agent on reboot"
