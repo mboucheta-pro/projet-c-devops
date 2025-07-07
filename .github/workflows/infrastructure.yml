@@ -27,17 +27,17 @@ on:
         description: 'Configurer Jenkins après création'
         required: false
         type: boolean
-        default: false
+        default: true
       configure_jenkins_agent:
         description: 'Configurer Jenkins agent après création'
         required: false
         type: boolean
-        default: false
+        default: true
       configure_sonarqube:
         description: 'Configurer SonarQube après création'
         required: false
         type: boolean
-        default: false
+        default: true
 
 jobs:
   create:
