@@ -70,8 +70,7 @@ jobs:
           terraform init
           terraform validate
           terraform plan -out="tfplan"
-          terraform state push errored.tfstate
-          #terraform apply -auto-approve tfplan
+          terraform apply -auto-approve tfplan
 
       - name: Get IPs from Terraform output
         id: get_output
