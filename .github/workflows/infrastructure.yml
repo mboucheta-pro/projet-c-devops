@@ -87,6 +87,7 @@ jobs:
         id: get_output
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
           echo "JENKINS_IP=$(terraform output jenkins_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV
           echo "JENKINS_AGENT_IP=$(terraform output jenkins_agent-ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV
           echo "SONARQUBE_IP=$(terraform output sonarqube_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV            
