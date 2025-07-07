@@ -4,12 +4,12 @@ resource "aws_security_group" "infra_instances" {
   description = "Security group for CI/CD instances in VPC Infra"
   vpc_id      = aws_vpc.infra.id
 
-  # SSH - Accès depuis les VPC internes et Internet
+  # SSH - Accès depuis Internet
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_infra_cidr, var.vpc_app_cidr, "0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # Jenkins
@@ -51,13 +51,7 @@ resource "aws_security_group" "infra_instances" {
     cidr_blocks = [var.vpc_infra_cidr]
   }
 
-  # Communication inter-VPC
-  ingress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_app_cidr]
-  }
+
 
   egress {
     from_port   = 0
@@ -75,40 +69,3 @@ resource "aws_security_group" "infra_instances" {
   }
 }
 
-# Groupe de sécurité pour le VPC App (EKS)
-resource "aws_security_group" "app_instances" {
-  name        = "${var.project}-app-instances-sg"
-  description = "Security group for EKS nodes in VPC App"
-  vpc_id      = aws_vpc.app.id
-
-  # Communication inter-VPC
-  ingress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_infra_cidr]
-  }
-
-  # Communication interne VPC App
-  ingress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_app_cidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.project}-app-instances-sg"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}

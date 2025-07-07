@@ -14,10 +14,7 @@ resource "random_password" "sonarqube_admin" {
   special = true
 }
 
-resource "random_password" "database" {
-  length  = 16
-  special = true
-}
+
 
 # Secrets AWS avec mots de passe générés automatiquement
 resource "aws_secretsmanager_secret" "jenkins_credentials" {
@@ -62,22 +59,7 @@ resource "aws_secretsmanager_secret_version" "sonarqube_credentials" {
   })
 }
 
-resource "aws_secretsmanager_secret" "database_credentials" {
-  name                    = "${var.project}-database-credentials"
-  description             = "Credentials pour la base de données"
-  recovery_window_in_days = 0
-}
 
-resource "aws_secretsmanager_secret_version" "database_credentials" {
-  secret_id = aws_secretsmanager_secret.database_credentials.id
-  secret_string = jsonencode({
-    username = var.db_username
-    password = random_password.database.result
-    endpoint = aws_db_instance.main.endpoint
-    port     = aws_db_instance.main.port
-    database = aws_db_instance.main.db_name
-  })
-}
 
 # Référence au secret AWS existant pour le token GitHub Runner
 data "aws_secretsmanager_secret" "github_runner_token" {

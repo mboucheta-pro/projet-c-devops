@@ -9,20 +9,9 @@ output "vpc_infra_public_subnets" {
   value       = aws_subnet.infra_public[*].id
 }
 
-# VPC App Outputs
-output "vpc_app_id" {
-  description = "ID du VPC Application"
-  value       = aws_vpc.app.id
-}
-
-output "vpc_app_private_subnets" {
-  description = "IDs des subnets privés VPC App"
-  value       = aws_subnet.app_private[*].id
-}
-
-output "vpc_app_public_subnets" {
-  description = "IDs des subnets publics VPC App"
-  value       = aws_subnet.app_public[*].id
+output "vpc_infra_cidr" {
+  description = "CIDR du VPC Infrastructure"
+  value       = aws_vpc.infra.cidr_block
 }
 
 # CI/CD Infrastructure Outputs
@@ -76,11 +65,7 @@ output "sonarqube_url" {
   value       = "http://${aws_instance.sonarqube.public_ip}:9000"
 }
 
-# VPC Peering
-output "vpc_peering_connection_id" {
-  description = "ID de la connexion VPC Peering"
-  value       = aws_vpc_peering_connection.infra_to_app.id
-}
+
 
 # Secrets ARNs
 output "jenkins_secret_arn" {
@@ -98,10 +83,7 @@ output "sonarqube_secret_arn" {
   value       = aws_secretsmanager_secret.sonarqube_credentials.arn
 }
 
-output "database_secret_arn" {
-  description = "ARN du secret base de données"
-  value       = aws_secretsmanager_secret.database_credentials.arn
-}
+
 
 output "github_runner_token_arn" {
   description = "ARN du secret GitHub Runner Token"
@@ -113,21 +95,7 @@ output "ssh_private_key_arn" {
   value       = data.aws_secretsmanager_secret.ssh_private_key.arn
 }
 
-# RDS Outputs
-output "rds_endpoint" {
-  description = "Endpoint de la base de données RDS"
-  value       = aws_db_instance.main.endpoint
-}
 
-output "rds_port" {
-  description = "Port de la base de données RDS"
-  value       = aws_db_instance.main.port
-}
-
-output "database_name" {
-  description = "Nom de la base de données"
-  value       = aws_db_instance.main.db_name
-}
 
 # Mots de passe générés automatiquement (sensibles)
 output "jenkins_admin_password" {
@@ -148,13 +116,19 @@ output "sonarqube_admin_password" {
   sensitive   = true
 }
 
-output "database_password" {
-  description = "Mot de passe de la base de données généré automatiquement"
-  value       = random_password.database.result
-  sensitive   = true
-}
+
 
 output "github_account" {
   description = "Nom du compte GitHub"
   value       = split("/", var.github_repo)[0]
+}
+
+output "s3_bucket_name" {
+  description = "Nom du bucket S3 pour le backend Terraform"
+  value       = aws_s3_bucket.terraform_state.bucket
+}
+
+output "dynamodb_table_name" {
+  description = "Nom de la table DynamoDB pour les verrous"
+  value       = aws_dynamodb_table.terraform_locks.name
 }

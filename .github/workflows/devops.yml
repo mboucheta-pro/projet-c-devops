@@ -13,7 +13,7 @@ on:
           - devops-destroy
 
 env:
-  TF_BACKEND_BUCKET: projet-c-terraform-state
+  TF_BACKEND_BUCKET: projet-c-terraform-state-devops
 
 jobs:
   devops-create:
@@ -28,12 +28,12 @@ jobs:
       
       - name: Plan and Apply Terraform
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform-devops
+          cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           
           # Plan and Apply
           terraform validate
-          terraform plan -out="tfplan"
+          terraform plan -var-file="terraform-devops.tfvars" -out="tfplan"
           terraform apply -auto-approve tfplan
           terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs-raw.json"
           grep -v "^\[command\]" "$GITHUB_WORKSPACE/terraform-outputs-raw.json" | grep -v "^::debug::" > "$GITHUB_WORKSPACE/terraform-outputs.json"
@@ -56,7 +56,7 @@ jobs:
             
       - name: Execute Terraform Destroy
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform-devops
+          cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
-          terraform destroy -auto-approve
+          terraform destroy -var-file="terraform-devops.tfvars" -auto-approve

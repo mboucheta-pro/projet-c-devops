@@ -31,9 +31,27 @@ variable "github_repo" {
   type        = string
 }
 
-variable "db_username" {
-  description = "Nom d'utilisateur de la base de données"
+
+
+variable "tf_backend_bucket" {
+  description = "Nom du bucket S3 pour le backend Terraform"
   type        = string
-  sensitive   = true
-  default     = "admin"
+}
+
+variable "tf_backend_dynamodb" {
+  description = "Nom de la table DynamoDB pour les verrous Terraform"
+  type        = string
+}
+
+# Variables spécifiques DevOps
+variable "github_token_secret_name" {
+  description = "Nom du secret contenant le token GitHub"
+  type        = string
+  default     = "github-runner-token"
+}
+
+variable "ssh_key_secret_name" {
+  description = "Nom du secret contenant la clé SSH privée"
+  type        = string
+  default     = "ssh-private-key"
 }

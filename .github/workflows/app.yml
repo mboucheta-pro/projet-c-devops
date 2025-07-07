@@ -1,26 +1,24 @@
-name: Gestion du backend
+name: Gestion de l'infra App
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Gestion du backend'
+        description: 'Action à effectuer'
         required: true
-        default: 'deploy'
+        default: 'app-create'
         type: choice
         options:
-          - create
-          - destroy
+          - app-create
+          - app-destroy
 
 env:
-  TF_BACKEND_BUCKET: projet-c-terraform-state-devops
+  TF_BACKEND_BUCKET: projet-c-terraform-state-app
 
 jobs:
-  backend-create:
-    # Il existe l'image hashicorp/terraform-ansible qui contient Terraform et Ansible pré-installés
-    # Mais il est préférable d'utiliser ubuntu-latest pour plus de contrôle et de flexibilité
+  app-create:
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'create'
+    if: github.event.inputs.action == 'app-create'
     steps:
       - uses: actions/checkout@v4
 
@@ -30,15 +28,15 @@ jobs:
       
       - name: Plan and Apply Terraform
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
+          cd $GITHUB_WORKSPACE/../projet-c-app/infra/terraform
           terraform init
           terraform validate
-          terraform plan -var-file="terraform-devops.tfvars" -out="tfplan"
+          terraform plan -out="tfplan"
           terraform apply -auto-approve tfplan
           
-  backend-destroy:
+  app-destroy:
     runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
+    if: github.event.inputs.action == 'app-destroy'
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +46,6 @@ jobs:
             
       - name: Execute Terraform Destroy
         run: |
-          cd $GITHUB_WORKSPACE/infra/terraform
+          cd $GITHUB_WORKSPACE/../projet-c-app/infra/terraform
           terraform init
-          terraform destroy -var-file="terraform-devops.tfvars" -auto-approve
+          terraform destroy -auto-approve
