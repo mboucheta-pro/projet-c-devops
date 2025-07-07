@@ -17,6 +17,15 @@
       - github
     jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
     jenkins_http_port: 8080
+  pre_tasks:
+    - name: Enable 'universe' repository on Ubuntu
+      apt_repository:
+        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
+        state: present
+      when: ansible_distribution == 'Ubuntu'
+    - name: Update apt cache
+      apt:
+        update_cache: yes
   roles:
     - role: geerlingguy.java
     - role: geerlingguy.jenkins
