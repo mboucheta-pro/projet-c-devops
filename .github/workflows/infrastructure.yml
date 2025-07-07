@@ -19,22 +19,22 @@ on:
         type: boolean
         default: false
       configure_bucket_S3:
-        description: 'Configurer bucket S3 + DynamoDB(backend Terraform)'
+        description: 'Configurer bucket S3 + DynamoDB (backend Terraform)'
         required: false
         type: boolean
         default: false
       configure_jenkins_master:
-        description: 'Configurer Jenkins après création'
+        description: 'Configurer Jenkins master'
         required: false
         type: boolean
         default: true
       configure_jenkins_agent:
-        description: 'Configurer Jenkins agent après création'
+        description: 'Configurer Jenkins agent'
         required: false
         type: boolean
         default: true
       configure_sonarqube:
-        description: 'Configurer SonarQube après création'
+        description: 'Configurer SonarQube'
         required: false
         type: boolean
         default: true
