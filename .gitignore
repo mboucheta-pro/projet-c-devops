@@ -4,5 +4,3 @@ projet-c.code-workspace
 *.pem
 .terraform*
 *.tfstate*
-*.tfvars
-scripts
