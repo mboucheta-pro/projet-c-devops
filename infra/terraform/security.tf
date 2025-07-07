@@ -33,7 +33,7 @@ resource "aws_security_group" "infra_instances" {
     from_port   = 50000
     to_port     = 50000
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_infra_cidr]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
