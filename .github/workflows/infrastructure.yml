@@ -124,7 +124,7 @@ jobs:
 
       - uses: ./.github/actions/setup-terraform
         with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }} 
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
       - name: Plan Infrastructure Changes
         run: |
