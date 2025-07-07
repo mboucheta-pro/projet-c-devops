@@ -57,7 +57,8 @@
       copy:
         content: |
           #!/bin/bash
-          su - jenkins -c "cd {{ jenkins_agent_home }}/agent && java -jar agent.jar -jnlpUrl {{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}/agent"
+          cd {{ jenkins_agent_home }}/agent
+          java -jar agent.jar -jnlpUrl {{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}/agent
         dest: "{{ jenkins_agent_home }}/start-agent.sh"
         owner: "{{ jenkins_agent_user }}"
         group: "{{ jenkins_agent_user }}"
