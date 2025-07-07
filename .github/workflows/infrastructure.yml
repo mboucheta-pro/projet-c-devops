@@ -93,7 +93,6 @@ jobs:
           ./scripts/deploy_jenkins.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
-          JENKINS_IP: ${{ env.JENKINS_IP }}
 
       - name: Configure Jenkins agent
         if: github.event.inputs.configure_jenkins_agent == 'true'
@@ -102,7 +101,6 @@ jobs:
           ./scripts/deploy_jenkins_agent.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
-          JENKINS_IP: ${{ env.JENKINS_AGENT_IP }}
 
       - name: Configure SonarQube
         if: github.event.inputs.configure_sonarqube == 'true'
@@ -111,7 +109,7 @@ jobs:
           ./scripts/deploy_sonarqube.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
-          SONARQUBE_IP: ${{ env.SONARQUBE_IP }}
+          
   update:
     runs-on: ubuntu-latest
     if: github.event.inputs.action == 'update'
