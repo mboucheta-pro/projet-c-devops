@@ -11,7 +11,7 @@ eval "$(ssh-agent -s)"
 ssh-add <(echo "$SSH_PRIVATE_KEY")
 
 # Créer le fichier d'inventaire avec les IPs réelles
-cat > inventory_jenkins.yml << EOF
+cat > inventory_sonarqube.yml << EOF
 all:
 vars:
     ansible_user: ubuntu
@@ -24,7 +24,7 @@ children:
         ansible_host: "$SONARQUBE_IP"
 EOF
 cat inventory_jenkins.yml 
-ansible-playbook -i inventory_sonar.yml sonarqube-playbook.yml
+ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml
