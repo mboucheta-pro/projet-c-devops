@@ -15,6 +15,11 @@ variable "vpc_infra_cidr" {
   type        = string
 }
 
+variable "vpc_app_cidr" {
+  description = "CIDR block for the application VPC to allow routing from infra VPC"
+  type        = string
+}
+
 variable "ubuntu_ami" {
   description = "AMI Ubuntu 24.04 LTS"
   type        = string
