@@ -48,8 +48,8 @@ jobs:
         if: github.event.inputs.configure_bucket_S3 == 'true'
         run: |
           # Création du bucket S3
-          aws s3api create-bucket --bucket projet-c-terraform-state-devops --region ca-central-1 --create-bucket-configuration LocationConstraint=ca-central-1 || true
-          aws s3api put-bucket-versioning --bucket projet-c-terraform-state-devops --versioning-configuration Status=Enabled
+          aws s3api create-bucket --bucket projet-c-devops --region ca-central-1 --create-bucket-configuration LocationConstraint=ca-central-1 || true
+          aws s3api put-bucket-versioning --bucket projet-c-devops --versioning-configuration Status=Enabled
 
           # Création de la table DynamoDB pour le state lock Terraform
           aws dynamodb create-table \
