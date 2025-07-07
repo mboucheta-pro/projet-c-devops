@@ -22,12 +22,17 @@ on:
         required: false
         type: boolean
         default: false
-      configure_jenkins:
+      configure_jenkins_master:
         description: 'Configurer Jenkins après création'
         required: false
         type: boolean
         default: false
-      configure_sonar:
+      configure_jenkins_agent:
+        description: 'Configurer Jenkins agent après création'
+        required: false
+        type: boolean
+        default: false
+      configure_sonarqube:
         description: 'Configurer SonarQube après création'
         required: false
         type: boolean
@@ -62,37 +67,35 @@ jobs:
       - name: Deploy Infrastructure
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
-          terraform fmt
           terraform init
           terraform validate
           terraform plan -out="tfplan"
           terraform apply -auto-approve tfplan
-          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
       
-      - name: Upload Terraform Outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-outputs
-          path: ${{ github.workspace }}/terraform-outputs.json
-
       - name: Install Ansible
-        if: github.event.inputs.configure_jenkins == 'true' || github.event.inputs.configure_sonar == 'true'
+        if: github.event.inputs.configure_jenkins_master == 'true' || github.event.inputs.configure_jenkins_agent == 'true' || github.event.inputs.configure_sonarqube == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible jq
 
-      - name: Configure Jenkins
-        if: github.event.inputs.configure_jenkins == 'true'
+      - name: Configure Jenkins master
+        if: github.event.inputs.configure_jenkins_master == 'true'
         run: |
           chmod +x scripts/deploy_jenkins.sh
-          chmod +x scripts/deploy_jenkins_agent.sh
           ./scripts/deploy_jenkins.sh
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+
+      - name: Configure Jenkins agent
+        if: github.event.inputs.configure_jenkins_agent == 'true'
+        run: |
+          chmod +x scripts/deploy_jenkins_agent.sh
           ./scripts/deploy_jenkins_agent.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
 
       - name: Configure SonarQube
-        if: github.event.inputs.configure_sonar == 'true'
+        if: github.event.inputs.configure_sonarqube == 'true'
         run: |
           chmod +x scripts/deploy_sonarqube.sh
           ./scripts/deploy_sonarqube.sh

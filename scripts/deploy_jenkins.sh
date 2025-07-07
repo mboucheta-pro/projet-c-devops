@@ -11,10 +11,8 @@ SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KE
 
 # Créer le fichier de clé SSH temporaire
 cd $GITHUB_WORKSPACE/infra/ansible
-export SSH_KEY_FILE=./projet-c-key.pem
-echo "$SSH_PRIVATE_KEY" > $SSH_KEY_FILE
-chmod 600 $SSH_KEY_FILE
-cat $SSH_KEY_FILE
+eval "$(ssh-agent -s)"
+ssh-add <(echo "$SSH_PRIVATE_KEY")
 
 # Exporter les variables d'environnement pour Ansible
 export JENKINS_MASTER_URL="http://${JENKINS_IP}:8080"
@@ -24,7 +22,6 @@ cat > inventory_jenkins.yml << EOF
 all:
   vars:
     ansible_user: ubuntu
-    ansible_ssh_private_key_file: "${SSH_KEY_FILE}"
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
   children:
@@ -44,6 +41,5 @@ ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -vv
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml
-rm -f $SSH_KEY_FILE
 
 echo "Déploiement Jenkins terminé"

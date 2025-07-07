@@ -13,7 +13,7 @@ cd $GITHUB_WORKSPACE/infra/ansible
 SSH_KEY_FILE=./projet-c-key.pem
 echo "$SSH_PRIVATE_KEY" > $SSH_KEY_FILE
 chmod 600 $SSH_KEY_FILE
-cat $SSH_KEY_FILE
+
 
 # Créer le fichier d'inventaire avec les IPs réelles
 cat > inventory_sonar.yml << EOF
