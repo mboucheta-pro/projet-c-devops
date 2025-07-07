@@ -17,6 +17,11 @@ on:
         required: false
         type: boolean
         default: false
+      configure_bucket_S3:
+        description: 'Configurer bucket S3 (backend Terraform)'
+        required: false
+        type: boolean
+        default: false
       configure_jenkins:
         description: 'Configurer Jenkins après création'
         required: false
@@ -40,6 +45,7 @@ jobs:
           aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
 
       - name: Create S3 bucket for Terraform state
+        if: github.event.inputs.configure_bucket_S3 == 'true'
         run: |
           aws s3api create-bucket --bucket projet-c-terraform-state-devops --region ca-central-1 --create-bucket-configuration LocationConstraint=ca-central-1 || true
           aws s3api put-bucket-versioning --bucket projet-c-terraform-state-devops --versioning-configuration Status=Enabled
