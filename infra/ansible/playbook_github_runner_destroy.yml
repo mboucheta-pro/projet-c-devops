@@ -13,7 +13,7 @@
     - name: Supprimer le runner du repository GitHub
       shell: |
         cd /home/ubuntu/actions-runner
-        ./config.sh remove --token {{ github_runner_token }}
+        ./config.sh remove --token {{ lookup('env', 'GITHUB_RUNNER_TOKEN') }}
       become_user: ubuntu
       ignore_errors: true
 

@@ -7,7 +7,7 @@
       vars:
         runner_user: ubuntu
         runner_dir: /home/ubuntu/actions-runner
-        access_token: "{{ github_runner_token }}"
+        access_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') }}"
         runner_name: "{{ inventory_hostname }}"
         runner_labels:
           - self-hosted

@@ -1,0 +1,112 @@
+---
+- name: Configuration de l'agent Jenkins
+  hosts: jenkins_agents
+  become: true
+  vars:
+    java_packages:
+      - openjdk-21-jdk
+    jenkins_agent_user: jenkins
+    jenkins_agent_home: /home/jenkins
+  tasks:
+    - name: Installer Java
+      apt:
+        name: "{{ java_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Créer l'utilisateur jenkins
+      user:
+        name: "{{ jenkins_agent_user }}"
+        home: "{{ jenkins_agent_home }}"
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Créer le répertoire de travail de l'agent
+      file:
+        path: "{{ jenkins_agent_home }}/agent"
+        state: directory
+        owner: "{{ jenkins_agent_user }}"
+        group: "{{ jenkins_agent_user }}"
+        mode: '0755'
+
+    - name: Récupérer le secret de l'agent
+      uri:
+        url: "{{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp"
+        method: GET
+        user: admin
+        password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
+        force_basic_auth: yes
+        return_content: yes
+      register: jnlp_content
+      retries: 5
+      delay: 10
+
+    - name: Extraire le secret
+      set_fact:
+        jenkins_agent_secret: "{{ jnlp_content.content | regex_search('<argument>([a-f0-9]+)</argument>', '\\1') | first }}"
+
+    - name: Télécharger l'agent Jenkins
+      get_url:
+        url: "{{ jenkins_master_url }}/jnlpJars/agent.jar"
+        dest: "{{ jenkins_agent_home }}/agent/agent.jar"
+        owner: "{{ jenkins_agent_user }}"
+        group: "{{ jenkins_agent_user }}"
+        mode: '0644'
+
+    - name: Créer le script de démarrage de l'agent
+      copy:
+        content: |
+          #!/bin/bash
+          cd {{ jenkins_agent_home }}/agent
+          java -jar agent.jar -jnlpUrl {{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}/agent
+        dest: "{{ jenkins_agent_home }}/start-agent.sh"
+        owner: "{{ jenkins_agent_user }}"
+        group: "{{ jenkins_agent_user }}"
+        mode: '0755'
+
+    - name: Créer le service systemd pour l'agent Jenkins
+      copy:
+        content: |
+          [Unit]
+          Description=Jenkins Agent
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ jenkins_agent_user }}
+          WorkingDirectory={{ jenkins_agent_home }}
+          ExecStart={{ jenkins_agent_home }}/start-agent.sh
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/jenkins-agent.service
+        mode: '0644'
+
+    - name: Recharger systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Activer et démarrer le service jenkins-agent
+      systemd:
+        name: jenkins-agent
+        enabled: yes
+        state: started
+
+    - name: Vérifier le statut de l'agent sur Jenkins
+      uri:
+        url: "{{ jenkins_master_url }}/computer/jenkins-agent/api/json"
+        method: GET
+        user: admin
+        password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
+        force_basic_auth: yes
+        return_content: yes
+      register: agent_status
+      retries: 3
+      delay: 5
+
+    - name: Afficher le statut de l'agent
+      debug:
+        msg: "Agent jenkins-agent - Online: {{ agent_status.json.offline | ternary('Non', 'Oui') }}"
+      when: agent_status.json is defined
