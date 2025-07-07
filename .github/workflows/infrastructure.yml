@@ -12,19 +12,18 @@ on:
           - create
           - update
           - destroy
-          - configure-sonar
       confirm:
         description: 'Confirmer action (requis pour update/destroy)'
         required: false
         type: boolean
         default: false
-      configure:
+      configure_jenkins:
         description: 'Configurer Jenkins après création'
         required: false
         type: boolean
         default: false
       configure_sonar:
-        description: 'Configurer SonarQube (docker-compose)'
+        description: 'Configurer SonarQube après création'
         required: false
         type: boolean
         default: false
@@ -59,13 +58,13 @@ jobs:
           path: ${{ github.workspace }}/terraform-outputs.json
 
       - name: Install Ansible
-        if: github.event.inputs.configure == 'true' || github.event.inputs.configure_sonar == 'true'
+        if: github.event.inputs.configure_jenkins == 'true' || github.event.inputs.configure_sonar == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible jq
 
       - name: Configure Jenkins
-        if: github.event.inputs.configure == 'true'
+        if: github.event.inputs.configure_jenkins == 'true'
         run: |
           chmod +x scripts/deploy_jenkins.sh
           chmod +x scripts/deploy_jenkins_agent.sh
@@ -80,34 +79,23 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/terraform
           SONAR_IP=$(terraform output -raw sonarqube_ip)
           
-          # Attendre que l'instance soit prête
-          sleep 60
+          cd $GITHUB_WORKSPACE/infra/ansible
+          cat > inventory_sonar.yml << EOF
+          all:
+            vars:
+              ansible_user: ubuntu
+              ansible_ssh_private_key_file: "$GITHUB_WORKSPACE/projet-c.pem"
+              ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+            children:
+              sonarqube:
+                hosts:
+                  sonar-server:
+                    ansible_host: "$SONAR_IP"
+          EOF
           
-          # Configurer SonarQube via Ansible
-          cd $GITHUB_WORKSPACE/infra/ansible
-          ansible-playbook -i inventory.ini sonarqube-playbook.yml
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: False
-
-  configure-sonar:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'configure-sonar'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-terraform
-        with:
-          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
-
-      - name: Install Ansible
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible jq
-
-      - name: Configure SonarQube
-        run: |
-          cd $GITHUB_WORKSPACE/infra/ansible
-          ansible-playbook -i inventory.ini sonarqube-playbook.yml
+          export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
+          ansible-playbook -i inventory_sonar.yml sonarqube-playbook.yml
+          rm -f inventory_sonar.yml
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
 

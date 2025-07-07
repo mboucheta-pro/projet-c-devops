@@ -15,8 +15,6 @@ output "vpc_infra_cidr" {
 }
 
 # CI/CD Infrastructure Outputs
-
-
 output "jenkins_ip" {
   description = "Adresse IP publique de Jenkins"
   value       = aws_instance.jenkins.public_ip
@@ -32,8 +30,6 @@ output "jenkins_agent_ip" {
   value       = aws_instance.jenkins_agent.public_ip
 }
 
-
-
 output "sonarqube_ip" {
   description = "Adresse IP publique de SonarQube"
   value       = aws_instance.sonarqube.public_ip
@@ -44,26 +40,16 @@ output "sonarqube_url" {
   value       = "http://${aws_instance.sonarqube.public_ip}:9000"
 }
 
-
-
 # Secrets ARNs
 output "jenkins_secret_arn" {
   description = "ARN du secret Jenkins"
   value       = aws_secretsmanager_secret.jenkins_credentials.arn
 }
 
-
-
 output "sonarqube_secret_arn" {
   description = "ARN du secret SonarQube"
   value       = aws_secretsmanager_secret.sonarqube_credentials.arn
 }
-
-
-
-
-
-
 
 # Mots de passe générés automatiquement (sensibles)
 output "jenkins_admin_password" {
@@ -72,17 +58,11 @@ output "jenkins_admin_password" {
   sensitive   = true
 }
 
-
-
 output "sonarqube_admin_password" {
   description = "Mot de passe administrateur SonarQube généré automatiquement"
   value       = random_password.sonarqube_admin.result
   sensitive   = true
 }
-
-
-
-
 
 output "s3_bucket_name" {
   description = "Nom du bucket S3 pour le backend Terraform"
