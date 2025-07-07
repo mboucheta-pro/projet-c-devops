@@ -4,7 +4,7 @@
   become: true
   vars:
     java_packages:
-      - openjdk-21-jdk
+      - openjdk-17-jdk
     jenkins_admin_username: "{{ lookup('env', 'JENKINS_ADMIN_USERNAME') }}"
     jenkins_admin_password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
     jenkins_plugins:

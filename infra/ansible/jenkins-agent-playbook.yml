@@ -4,7 +4,7 @@
   become: true
   vars:
     java_packages:
-      - openjdk-21-jdk
+      - openjdk-17-jdk
     jenkins_agent_user: jenkins
     jenkins_agent_home: /home/jenkins
   tasks:
