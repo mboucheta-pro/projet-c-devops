@@ -26,6 +26,23 @@
     - name: Update apt cache
       apt:
         update_cache: yes
+
+    - name: Activer la synchronisation NTP avec systemd-timesyncd
+      become: yes
+      ansible.builtin.systemd:
+        name: systemd-timesyncd
+        enabled: yes
+        state: started
+
+    - name: Activer NTP avec timedatectl
+      become: yes
+      ansible.builtin.command: timedatectl set-ntp true
+      changed_when: false
+
+    - name: Configurer la timezone sur Europe/Paris
+      timezone:
+        name: Europe/Paris
+
   roles:
     - role: geerlingguy.java
     - role: geerlingguy.jenkins
