@@ -23,7 +23,7 @@ children:
         sonar-server:
         ansible_host: "$SONARQUBE_IP"
 EOF
-cat inventory_jenkins.yml 
+cat inventory_sonarqube.yml 
 ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml
 
 # Nettoyer les fichiers temporaires
