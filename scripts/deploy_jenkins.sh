@@ -29,7 +29,7 @@ ansible-galaxy install geerlingguy.java --force
 ansible-galaxy install geerlingguy.jenkins --force
 
 # Déployer Jenkins master
-ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -vv
+ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -v
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml

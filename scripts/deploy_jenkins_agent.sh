@@ -33,7 +33,7 @@ all:
 EOF
 cat inventory_jenkins_agent.yml
 # Déployer l'agent Jenkins
-ansible-playbook -i inventory_jenkins_agent.yml jenkins-agent-playbook.yml -vvvvv
+ansible-playbook -i inventory_jenkins_agent.yml jenkins-agent-playbook.yml -v
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins_agent.yml
