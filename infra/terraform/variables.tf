@@ -20,6 +20,11 @@ variable "vpc_app_cidr" {
   type        = string
 }
 
+variable "vpc_app_id" {
+  description = "ID de la VPC applicative"
+  type        = string
+}
+
 variable "ubuntu_ami" {
   description = "AMI Ubuntu 24.04 LTS"
   type        = string

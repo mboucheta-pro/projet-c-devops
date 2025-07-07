@@ -59,3 +59,9 @@ resource "aws_route_table_association" "infra_public" {
   subnet_id      = aws_subnet.infra_public[count.index].id
   route_table_id = aws_route_table.infra_public.id
 }
+
+resource "aws_vpc_peering_connection" "infra_to_app" {
+  vpc_id      = aws_vpc.infra.id
+  peer_vpc_id = var.vpc_app_id
+  auto_accept = true
+}
