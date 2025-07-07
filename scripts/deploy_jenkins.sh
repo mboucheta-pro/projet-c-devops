@@ -10,7 +10,6 @@ cd $GITHUB_WORKSPACE/infra/ansible
 eval "$(ssh-agent -s)"
 ssh-add <(echo "$SSH_PRIVATE_KEY")
 
-echo $JENKINS_IP
 # Créer le fichier d'inventaire avec les IPs réelles
 cat > inventory_jenkins.yml << EOF
 all:
@@ -21,7 +20,7 @@ all:
   children:
     jenkins:
       hosts:
-        jenkins-server:
+        jenkins-master:
           ansible_host: "${JENKINS_IP}"
 EOF
 
@@ -29,8 +28,7 @@ EOF
 ansible-galaxy install geerlingguy.java --force
 ansible-galaxy install geerlingguy.jenkins --force
 
-# Déployer Jenkins
-cat inventory_jenkins.yml
+# Déployer Jenkins master
 ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -vv
 
 # Nettoyer les fichiers temporaires
