@@ -27,7 +27,7 @@ variable "ubuntu_ami" {
 variable "tf_backend_bucket" {
   description = "Nom du bucket S3 pour le backend Terraform"
   type        = string
-  default = var.project
+  default = "projet-c-mohamed"
 }
 
 variable "tf_backend_dynamodb" {
