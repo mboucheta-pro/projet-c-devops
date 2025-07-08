@@ -144,7 +144,11 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "logs:TagResource",
           "logs:UntagResource",
           "logs:TagLogGroup",
-          "logs:PutRetentionPolicy"
+          "logs:PutRetentionPolicy",
+          "logs:ListTagsForResource",
+          "logs:ListTagsLogGroup",
+          "logs:DeleteRetentionPolicy",
+          "logs:GetLogEvents"
         ]
         Resource = "*"
       }
