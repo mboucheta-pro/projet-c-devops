@@ -55,45 +55,10 @@ on:
         default: false
 
 jobs:
-  # Job spécial pour exécution manuelle
-  manual_execution:
+  # Job pour l'action "create" en mode manuel
+  create_manual:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    outputs:
-      action: ${{ github.event.inputs.action }}
-      confirm: ${{ github.event.inputs.confirm }}
-    steps:
-      - name: Récupérer les inputs manuels
-        run: |
-          echo "Action sélectionnée: ${{ github.event.inputs.action }}"
-          echo "Confirmation: ${{ github.event.inputs.confirm }}"
-
-  # Job pour exécution automatique (push/PR)
-  determine_action:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    outputs:
-      action: ${{ steps.set-action.outputs.action }}
-    steps:
-      - name: Déterminer l'action à effectuer
-        id: set-action
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # Sur une PR, on fait uniquement un plan sans appliquer
-            echo "action=plan" >> $GITHUB_OUTPUT
-            echo "Événement Pull Request détecté - Action: Plan uniquement (sans apply)"
-          else
-            # Sur un push sur main/master, on fait une mise à jour
-            echo "action=update" >> $GITHUB_OUTPUT
-            echo "Événement Push sur branche principale détecté - Action: Update"
-          fi
-
-  create:
-    runs-on: ubuntu-latest
-    needs: [manual_execution, determine_action]
-    if: |
-      (needs.manual_execution.outputs.action == 'create' && github.event_name == 'workflow_dispatch') || 
-      (needs.determine_action.outputs.action == 'create' && github.event_name != 'workflow_dispatch')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'create'
     steps:
       - uses: actions/checkout@v4
 
@@ -124,12 +89,39 @@ jobs:
           terraform plan -out="tfplan"
           terraform apply -auto-approve tfplan
 
-  configure:
+  # Job pour l'action "create" en mode automatique
+  create_auto:
     runs-on: ubuntu-latest
-    needs: [manual_execution, determine_action]
-    if: |
-      (needs.manual_execution.outputs.action == 'configure' && github.event_name == 'workflow_dispatch') || 
-      (needs.determine_action.outputs.action == 'configure' && github.event_name != 'workflow_dispatch')
+    if: github.event_name != 'workflow_dispatch' && (github.event_name == 'push' || github.event_name == 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+
+      - name: Determine action
+        id: determine_action
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "action=plan" >> $GITHUB_OUTPUT
+          else
+            echo "action=update" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy Infrastructure (only if action=create)
+        if: steps.determine_action.outputs.action == 'create'
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform validate
+          terraform plan -out="tfplan"
+          terraform apply -auto-approve tfplan
+
+  # Job pour l'action "configure" en mode manuel
+  configure_manual:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'configure'
     steps:
       - uses: actions/checkout@v4
 
@@ -170,12 +162,35 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
 
-  update:
+  # Job pour l'action "configure" en mode automatique (généralement pas utilisé)
+  configure_auto:
     runs-on: ubuntu-latest
-    needs: [manual_execution, determine_action]
-    if: |
-      (needs.manual_execution.outputs.action == 'update' && github.event_name == 'workflow_dispatch') || 
-      (needs.determine_action.outputs.action == 'update' && github.event_name != 'workflow_dispatch')
+    if: github.event_name != 'workflow_dispatch' && (github.event_name == 'push' || github.event_name == 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+
+      - name: Determine action
+        id: determine_action
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "action=plan" >> $GITHUB_OUTPUT
+          else
+            echo "action=update" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure (only if action=configure)
+        if: steps.determine_action.outputs.action == 'configure'
+        run: |
+          echo "Cette action n'est généralement pas déclenchée automatiquement"
+
+  # Job pour l'action "update" en mode manuel
+  update_manual:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'update'
     steps:
       - uses: actions/checkout@v4
 
@@ -191,36 +206,56 @@ jobs:
           terraform plan -out="tfplan"
       
       - name: Apply Changes
-        if: |
-          github.event_name == 'push' || 
-          (github.event_name == 'workflow_dispatch' && needs.manual_execution.outputs.confirm == 'true')
+        if: github.event.inputs.confirm == 'true'
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform apply -auto-approve tfplan
           terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
       
       - name: Confirmation Required
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'true'
+        if: github.event.inputs.confirm != 'true'
         run: |
           echo "❌ Confirmation requise pour appliquer les changements"
           echo "Relancez le workflow avec 'confirm: true'"
           exit 1
 
       - name: Upload Terraform Outputs
-        if: |
-          github.event_name == 'push' || 
-          (github.event_name == 'workflow_dispatch' && needs.manual_execution.outputs.confirm == 'true')
+        if: github.event.inputs.confirm == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: terraform-outputs
           path: ${{ github.workspace }}/terraform-outputs.json
 
-  destroy:
+  # Job pour l'action "update" en mode automatique
+  update_auto:
     runs-on: ubuntu-latest
-    needs: [manual_execution, determine_action]
-    if: |
-      (needs.manual_execution.outputs.action == 'destroy' && github.event_name == 'workflow_dispatch') || 
-      (needs.determine_action.outputs.action == 'destroy' && github.event_name != 'workflow_dispatch')
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Plan and Apply Infrastructure Changes
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform validate
+          terraform plan -out="tfplan"
+          terraform apply -auto-approve tfplan
+          terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
+          
+      - name: Upload Terraform Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ github.workspace }}/terraform-outputs.json
+
+  # Job pour l'action "destroy" en mode manuel
+  destroy_manual:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     steps:
       - uses: actions/checkout@v4
 
@@ -229,28 +264,24 @@ jobs:
           aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
       - name: Confirmation Required
-        if: github.event_name == 'workflow_dispatch' && needs.manual_execution.outputs.confirm != 'true'
+        if: github.event.inputs.confirm != 'true'
         run: |
           echo "❌ Confirmation requise pour détruire l'infrastructure"
           echo "Relancez le workflow avec 'confirm: true'"
           exit 1
             
       - name: Destroy Infrastructure
-        if: |
-          github.event_name == 'push' || 
-          (github.event_name == 'workflow_dispatch' && needs.manual_execution.outputs.confirm == 'true')
+        if: github.event.inputs.confirm == 'true'
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
           sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf
           terraform destroy -auto-approve
 
-  plan:
+  # Job pour l'action "plan" en mode manuel
+  plan_manual:
     runs-on: ubuntu-latest
-    needs: [manual_execution, determine_action]
-    if: |
-      (needs.manual_execution.outputs.action == 'plan' && github.event_name == 'workflow_dispatch') || 
-      (needs.determine_action.outputs.action == 'plan' && github.event_name != 'workflow_dispatch')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
     steps:
       - uses: actions/checkout@v4
 
@@ -259,6 +290,24 @@ jobs:
           aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
       
       - name: Terraform Plan uniquement
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          terraform validate
+          terraform plan
+          
+  # Job pour l'action "plan" en mode pull request
+  plan_pr:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+      
+      - name: Terraform Plan uniquement (PR)
         run: |
           cd $GITHUB_WORKSPACE/infra/terraform
           terraform init
