@@ -1,0 +1,29 @@
+---
+# Jenkins role variables
+jenkins_plugins:
+  - git
+  - workflow-aggregator
+  - pipeline-stage-view
+  - docker-workflow
+  - kubernetes
+  - blueocean
+  - github
+  - credentials-binding
+  - ws-cleanup
+  - ansicolor
+  - terraform
+  - aws-credentials
+  - plain-credentials
+  - sonar
+  - sonar-quality-gates
+  - sonarqube-generic-coverage
+  - sonar-gerrit
+jenkins_plugins_install_dependencies: true
+jenkins_package_state: present
+jenkins_process_user: jenkins
+jenkins_process_group: "{{ jenkins_process_user }}"
+jenkins_init_changes:
+  - option: "JENKINS_ARGS"
+    value: "--prefix={{ jenkins_url_prefix | default('') }}"
+  - option: "JENKINS_JAVA_OPTIONS"
+    value: "{{ jenkins_java_options }}"

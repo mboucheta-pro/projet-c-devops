@@ -20,11 +20,15 @@
       timezone:
         name: Europe/Paris
 
-    - name: Install Docker
+    - name: Install Docker and dependencies
       apt:
         name: 
           - docker.io
           - docker-compose
+          - python3-pip
+          - python3-setuptools
+          - jq
+          - curl
         state: present
         update_cache: yes
 
@@ -99,8 +103,8 @@
           if [ -n "$TOKEN" ]; then
             echo "Token SonarQube créé avec succès"
             
-            # Enregistrer le token dans AWS Secrets Manager
-            if [ -n "$(command -v aws)" ]; then
+            # Vérifier si aws cli est disponible, sinon utiliser la sortie standard
+            if command -v aws >/dev/null 2>&1; then
               echo "Mise à jour du secret dans AWS Secrets Manager..."
               
               # Récupérer le secret existant
@@ -108,18 +112,35 @@
                 --secret-id projet-c-devops-sonarqube-credentials \
                 --region ca-central-1 \
                 --query SecretString \
-                --output text)
+                --output text 2>/dev/null)
               
-              # Ajouter le token au secret existant
-              UPDATED_SECRET=$(echo $EXISTING_SECRET | jq --arg token "$TOKEN" '. + {token: $token}')
-              
-              # Mettre à jour le secret
-              aws secretsmanager update-secret --secret-id projet-c-devops-sonarqube-credentials \
-                --secret-string "$UPDATED_SECRET" \
-                --region ca-central-1
+              if [ $? -eq 0 ] && [ -n "$EXISTING_SECRET" ]; then
+                # Ajouter le token au secret existant si jq est disponible
+                if command -v jq >/dev/null 2>&1; then
+                  UPDATED_SECRET=$(echo $EXISTING_SECRET | jq --arg token "$TOKEN" '. + {token: $token}')
+                  
+                  # Mettre à jour le secret
+                  aws secretsmanager update-secret --secret-id projet-c-devops-sonarqube-credentials \
+                    --secret-string "$UPDATED_SECRET" \
+                    --region ca-central-1
+                else
+                  echo "jq n'est pas installé, impossible de mettre à jour le secret proprement"
+                  echo "Token SonarQube: $TOKEN"
+                  # Créer une simple chaîne JSON
+                  SIMPLE_JSON="{\"admin_username\":\"${SONAR_ADMIN_USER}\",\"admin_password\":\"${SONAR_ADMIN_PASS}\",\"token\":\"${TOKEN}\"}"
+                  aws secretsmanager update-secret --secret-id projet-c-devops-sonarqube-credentials \
+                    --secret-string "$SIMPLE_JSON" \
+                    --region ca-central-1
+                fi
+              else
+                echo "Impossible de récupérer le secret existant ou secret vide"
+                echo "Token SonarQube: $TOKEN"
+                echo "Veuillez mettre à jour manuellement le secret dans AWS Secrets Manager"
+              fi
             else
-              echo "AWS CLI n'est pas installé, impossible de mettre à jour le secret"
+              echo "AWS CLI n'est pas disponible, voici le token pour l'utiliser manuellement:"
               echo "Token SonarQube: $TOKEN"
+              echo "Veuillez mettre à jour manuellement le secret dans AWS Secrets Manager"
             fi
           else
             echo "Échec de la création du token SonarQube"
@@ -137,8 +158,19 @@
       
     - name: Installer AWS CLI pour la mise à jour des secrets
       apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      with_items:
+        - python3-pip
+        - python3-setuptools
+      
+    - name: Installer AWS CLI via pip
+      pip:
         name: awscli
         state: present
+      register: pip_aws_result
+      ignore_errors: yes
       
     - name: Exécuter le script de configuration SonarQube
       shell: /tmp/configure-sonarqube.sh
@@ -147,3 +179,8 @@
         AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
         AWS_DEFAULT_REGION: "ca-central-1"
       become: false
+      register: configure_sonarqube_result
+      
+    - name: Afficher les résultats de la configuration
+      debug:
+        msg: "Configuration SonarQube terminée: {{ configure_sonarqube_result.stdout_lines }}"

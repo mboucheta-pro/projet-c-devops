@@ -10,26 +10,10 @@
     git_repo_url: "{{ lookup('env', 'GIT_REPO_URL') | default('https://github.com/votre-utilisateur/projet-c-app.git') }}"
     git_credentials_id: "{{ lookup('env', 'GIT_CREDENTIALS_ID') | default('') }}"
     aws_credentials_base64: "{{ lookup('env', 'AWS_CREDENTIALS_BASE64') | default('') }}"
-    jenkins_plugins:
-      - git
-      - workflow-aggregator
-      - pipeline-stage-view
-      - docker-workflow
-      - kubernetes
-      - blueocean
-      - github
-      - credentials-binding
-      - ws-cleanup
-      - ansicolor
-      - terraform
-      - aws-credentials
-      - plain-credentials
-      - sonar
-      - sonar-quality-gates
-      - sonarqube-generic-coverage
-      - sonar-gerrit
     jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
     jenkins_http_port: 8080
+  vars_files:
+    - vars/jenkins.yml
   pre_tasks:
     - name: Enable 'universe' repository on Ubuntu
       apt_repository:
@@ -94,7 +78,6 @@
   roles:
     - role: geerlingguy.java
     - role: geerlingguy.jenkins
-      jenkins_plugins: "{{ jenkins_plugins }}"
 
   post_tasks:
     - name: Attendre que Jenkins soit disponible

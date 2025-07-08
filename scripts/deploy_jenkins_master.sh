@@ -35,6 +35,12 @@ EOF
 ansible-galaxy install geerlingguy.java --force
 ansible-galaxy install geerlingguy.jenkins --force
 
+# Créer le répertoire vars s'il n'existe pas
+mkdir -p vars
+
+# Vérifier la syntaxe du playbook
+ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml --syntax-check
+
 # Déployer Jenkins master
 ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -v
 
