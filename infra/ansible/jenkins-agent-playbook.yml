@@ -7,12 +7,34 @@
       - openjdk-17-jdk
     jenkins_agent_user: jenkins
     jenkins_agent_home: /home/jenkins
+    terraform_version: "1.5.7"
+    kubectl_version: "1.28.6"
+    docker_compose_version: "2.24.6"
+    sonar_scanner_version: "5.0.1.3006"
+    trivy_version: "0.46.1"
   tasks:
-    - name: Installer Java
+    - name: Mettre à jour le cache APT
       apt:
-        name: "{{ java_packages }}"
-        state: present
         update_cache: yes
+
+    - name: Installer les dépendances de base
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - unzip
+          - jq
+          - git
+          - wget
+          - python3-pip
+          - build-essential
+          - libssl-dev
+          - maven
+        state: present
 
     - name: Activer NTP avec timedatectl
       become: yes
@@ -22,6 +44,11 @@
     - name: Configurer la timezone sur Europe/Paris
       timezone:
         name: Europe/Paris
+        
+    - name: Installer Java
+      apt:
+        name: "{{ java_packages }}"
+        state: present
 
     - name: Créer l'utilisateur jenkins
       user:
@@ -120,3 +147,147 @@
       debug:
         msg: "Agent jenkins-agent - Online: {{ agent_status.json.offline | ternary('Non', 'Oui') }}"
       when: agent_status.json is defined
+      
+    # Installation de Docker
+    - name: Ajouter la clé GPG Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Ajouter le dépôt Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        
+    - name: Installer Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+        
+    - name: Ajouter l'utilisateur jenkins au groupe docker
+      user:
+        name: "{{ jenkins_agent_user }}"
+        groups: docker
+        append: yes
+        
+    # Installation de Docker Compose
+    - name: Télécharger Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    # Installation de Terraform
+    - name: Télécharger Terraform
+      get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
+        dest: /tmp/terraform.zip
+        mode: '0644'
+        
+    - name: Installer Terraform
+      unarchive:
+        src: /tmp/terraform.zip
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+        creates: /usr/local/bin/terraform
+        
+    # Installation de kubectl
+    - name: Télécharger kubectl
+      get_url:
+        url: "https://dl.k8s.io/release/v{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+        
+    # Installation de Trivy
+    - name: Ajouter le dépôt Trivy
+      shell: |
+        curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | tee /usr/share/keyrings/trivy.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/trivy.list
+      args:
+        creates: /etc/apt/sources.list.d/trivy.list
+        
+    - name: Installer Trivy
+      apt:
+        name: trivy
+        state: present
+        update_cache: yes
+        
+    # Installation de SonarScanner
+    - name: Télécharger SonarScanner
+      get_url:
+        url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
+        dest: /tmp/sonar-scanner.zip
+        mode: '0644'
+        
+    - name: Créer le répertoire pour SonarScanner
+      file:
+        path: /opt/sonar-scanner
+        state: directory
+        mode: '0755'
+        
+    - name: Extraire SonarScanner
+      unarchive:
+        src: /tmp/sonar-scanner.zip
+        dest: /opt
+        remote_src: yes
+        creates: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
+        
+    - name: Créer un lien symbolique pour SonarScanner
+      file:
+        src: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
+        dest: /opt/sonar-scanner
+        state: link
+        
+    - name: Ajouter SonarScanner au PATH
+      copy:
+        dest: /etc/profile.d/sonar-scanner.sh
+        content: |
+          export PATH=$PATH:/opt/sonar-scanner/bin
+        mode: '0644'
+        
+    # Installation d'AWS CLI
+    - name: Télécharger AWS CLI
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+        
+    - name: Extraire AWS CLI
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+        creates: /tmp/aws
+        
+    - name: Installer AWS CLI
+      command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+        
+    # Nettoyer les fichiers temporaires
+    - name: Supprimer les fichiers temporaires
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/terraform.zip
+        - /tmp/sonar-scanner.zip
+        - /tmp/awscliv2.zip
+        
+    # Configuration de l'environnement pour Jenkins
+    - name: Créer le fichier .bashrc pour l'utilisateur jenkins
+      copy:
+        dest: "{{ jenkins_agent_home }}/.bashrc"
+        owner: "{{ jenkins_agent_user }}"
+        group: "{{ jenkins_agent_user }}"
+        mode: '0644'
+        content: |
+          # Fichier .bashrc pour l'agent Jenkins
+          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
+          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
+          export SONAR_SCANNER_HOME=/opt/sonar-scanner
