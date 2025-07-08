@@ -6,7 +6,7 @@ on:
       action:
         description: 'Action à effectuer'
         required: true
-        default: 'configure'
+        default: 'update'
         type: choice
         options:
           - create
@@ -27,17 +27,17 @@ on:
         description: 'Configurer Jenkins master'
         required: false
         type: boolean
-        default: true
+        default: false
       configure_jenkins_agent:
         description: 'Configurer Jenkins agent'
         required: false
         type: boolean
-        default: true
+        default: false
       configure_sonarqube:
         description: 'Configurer SonarQube'
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   create:
