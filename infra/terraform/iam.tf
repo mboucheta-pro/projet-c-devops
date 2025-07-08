@@ -57,7 +57,13 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "iam:CreateServiceLinkedRole",
           "iam:AttachRolePolicy",
           "iam:DetachRolePolicy",
-          "iam:DeleteRole"
+          "iam:DeleteRole",
+          "iam:CreateRole",
+          "iam:CreatePolicy",
+          "iam:ListPolicies",
+          "iam:PutRolePolicy",
+          "iam:GetPolicy",
+          "iam:DeletePolicy"
         ]
         Resource = "*"
       },
@@ -65,11 +71,17 @@ resource "aws_iam_role_policy" "cicd_instances" {
         Effect = "Allow"
         Action = [
           "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:CreateSecret",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:TagResource"
         ]
         Resource = [
           aws_secretsmanager_secret.jenkins_credentials.arn,
-          aws_secretsmanager_secret.sonarqube_credentials.arn
+          aws_secretsmanager_secret.sonarqube_credentials.arn,
+          "arn:aws:secretsmanager:${var.region}:*:secret:projet-c-app-*"
         ]
       },
       {
@@ -102,6 +114,25 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "arn:aws:dynamodb:${var.region}:*:table/${var.tf_backend_dynamodb}",
           "arn:aws:dynamodb:${var.region}:*:table/terraform-locks"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:DeleteLogGroup"
+        ]
+        Resource = "*"
       }
     ]
   })
