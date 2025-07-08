@@ -41,6 +41,28 @@ resource "aws_iam_role_policy" "cicd_instances" {
           aws_secretsmanager_secret.jenkins_credentials.arn,
           aws_secretsmanager_secret.sonarqube_credentials.arn
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.tf_backend_bucket}",
+          "arn:aws:s3:::${var.tf_backend_bucket}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = "arn:aws:dynamodb:*:*:table/${var.tf_backend_dynamodb}"
       }
     ]
   })
