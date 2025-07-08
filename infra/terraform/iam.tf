@@ -194,6 +194,26 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "kms:ReEncrypt*"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:CreateRepository",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:DeleteRepository",
+          "ecr:TagResource",
+          "ecr:UntagResource"
+        ]
+        Resource = "*"
       }
     ]
   })
