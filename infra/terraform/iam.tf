@@ -67,7 +67,11 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "iam:TagRole",
           "iam:TagPolicy",
           "iam:UntagRole",
-          "iam:UntagPolicy"
+          "iam:UntagPolicy",
+          "iam:ListRolePolicies",
+          "iam:GetPolicyVersion",
+          "iam:ListPolicyVersions",
+          "iam:ListAttachedRolePolicies"
         ]
         Resource = "*"
       },
@@ -139,7 +143,8 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "logs:DeleteLogGroup",
           "logs:TagResource",
           "logs:UntagResource",
-          "logs:TagLogGroup"
+          "logs:TagLogGroup",
+          "logs:PutRetentionPolicy"
         ]
         Resource = "*"
       }
