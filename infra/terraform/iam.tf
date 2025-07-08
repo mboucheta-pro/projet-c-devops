@@ -52,9 +52,7 @@ resource "aws_iam_role_policy" "cicd_instances" {
         ]
         Resource = [
           "arn:aws:s3:::${var.tf_backend_bucket}",
-          "arn:aws:s3:::${var.tf_backend_bucket}/*",
-          "arn:aws:s3:::projet-c-mohamed",
-          "arn:aws:s3:::projet-c-mohamed/*"
+          "arn:aws:s3:::${var.tf_backend_bucket}/*"
         ]
       },
       {
@@ -72,7 +70,7 @@ resource "aws_iam_role_policy" "cicd_instances" {
         ]
         Resource = [
           "arn:aws:dynamodb:${var.region}:*:table/${var.tf_backend_dynamodb}",
-          "arn:aws:dynamodb:${var.region}:*:table/projet-c-terraform-locks-app"
+          "arn:aws:dynamodb:${var.region}:*:table/terraform-locks"
         ]
       }
     ]
