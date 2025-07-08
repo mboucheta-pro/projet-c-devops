@@ -52,7 +52,9 @@ resource "aws_iam_role_policy" "cicd_instances" {
         ]
         Resource = [
           "arn:aws:s3:::${var.tf_backend_bucket}",
-          "arn:aws:s3:::${var.tf_backend_bucket}/*"
+          "arn:aws:s3:::${var.tf_backend_bucket}/*",
+          "arn:aws:s3:::projet-c-mohamed",
+          "arn:aws:s3:::projet-c-mohamed/*"
         ]
       },
       {
@@ -60,9 +62,18 @@ resource "aws_iam_role_policy" "cicd_instances" {
         Action = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
-          "dynamodb:DeleteItem"
+          "dynamodb:DeleteItem",
+          "dynamodb:GetRecords",
+          "dynamodb:UpdateItem",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:DescribeTable",
+          "dynamodb:ListTables"
         ]
-        Resource = "arn:aws:dynamodb:*:*:table/${var.tf_backend_dynamodb}"
+        Resource = [
+          "arn:aws:dynamodb:${var.region}:*:table/${var.tf_backend_dynamodb}",
+          "arn:aws:dynamodb:${var.region}:*:table/projet-c-terraform-locks-app"
+        ]
       }
     ]
   })
