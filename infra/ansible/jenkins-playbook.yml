@@ -7,6 +7,9 @@
       - openjdk-17-jdk
     jenkins_admin_username: "{{ lookup('env', 'JENKINS_ADMIN_USERNAME') }}"
     jenkins_admin_password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
+    git_repo_url: "{{ lookup('env', 'GIT_REPO_URL') | default('https://github.com/votre-utilisateur/projet-c-app.git') }}"
+    git_credentials_id: "{{ lookup('env', 'GIT_CREDENTIALS_ID') | default('') }}"
+    aws_credentials_base64: "{{ lookup('env', 'AWS_CREDENTIALS_BASE64') | default('') }}"
     jenkins_plugins:
       - git
       - workflow-aggregator
@@ -15,6 +18,12 @@
       - kubernetes
       - blueocean
       - github
+      - credentials-binding
+      - ws-cleanup
+      - ansicolor
+      - terraform
+      - aws-credentials
+      - plain-credentials
     jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
     jenkins_http_port: 8080
   pre_tasks:
@@ -23,9 +32,33 @@
         repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
         state: present
       when: ansible_distribution == 'Ubuntu'
+    
     - name: Update apt cache
       apt:
         update_cache: yes
+
+    - name: Installation des outils nécessaires pour Terraform et AWS
+      apt:
+        name:
+          - jq
+          - awscli
+          - unzip
+          - python3-pip
+        state: present
+        
+    - name: Téléchargement de Terraform
+      get_url:
+        url: https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        dest: /tmp/terraform.zip
+        mode: '0644'
+      
+    - name: Installation de Terraform
+      unarchive:
+        src: /tmp/terraform.zip
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+        creates: /usr/local/bin/terraform
 
     - name: Activer NTP avec timedatectl
       become: yes
@@ -39,3 +72,65 @@
   roles:
     - role: geerlingguy.java
     - role: geerlingguy.jenkins
+      
+  tasks:
+    - name: Attendre que Jenkins soit disponible
+      uri:
+        url: http://localhost:{{ jenkins_http_port }}/
+        status_code: 200
+        timeout: 5
+      register: jenkins_service_status
+      retries: 15
+      delay: 5
+      until: jenkins_service_status.status == 200
+      changed_when: false
+      check_mode: false
+      
+    - name: Création du répertoire .aws pour l'utilisateur Jenkins
+      file:
+        path: /var/lib/jenkins/.aws
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0700'
+        
+    - name: Création des identifiants AWS
+      jenkins_script:
+        script: |
+          import jenkins.model.*
+          import com.cloudbees.plugins.credentials.*
+          import com.cloudbees.plugins.credentials.domains.*
+          import org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl
+          import hudson.util.Secret
+          
+          def credentialsStore = Jenkins.instance.getExtensionList('com.cloudbees.plugins.credentials.SystemCredentialsProvider')[0].getStore()
+          
+          def awsCredentials = new StringCredentialsImpl(
+            CredentialsScope.GLOBAL,
+            "AWS_CREDENTIALS_BASE64",
+            "AWS Credentials encoded in Base64",
+            Secret.fromString("{{ aws_credentials_base64 }}")
+          )
+          
+          // Supprimer les identifiants existants avec le même ID
+          def existingCredentials = credentialsStore.getCredentials(Domain.global()).find { it.id == "AWS_CREDENTIALS_BASE64" }
+          if (existingCredentials) {
+            credentialsStore.removeCredentials(Domain.global(), existingCredentials)
+          }
+          
+          // Ajouter les nouveaux identifiants
+          credentialsStore.addCredentials(Domain.global(), awsCredentials)
+        url: http://localhost:{{ jenkins_http_port }}
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+      when: aws_credentials_base64 != ""
+      ignore_errors: yes
+        
+    - name: Création du pipeline Infrastructure
+      jenkins_job:
+        name: "Infrastructure-Pipeline"
+        config: "{{ lookup('template', 'templates/infrastructure-pipeline.xml.j2') }}"
+        url: http://localhost:{{ jenkins_http_port }}
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+      ignore_errors: yes
