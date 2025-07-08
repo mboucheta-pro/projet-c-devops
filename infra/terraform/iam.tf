@@ -27,7 +27,37 @@ resource "aws_iam_role_policy" "cicd_instances" {
         Effect = "Allow"
         Action = [
           "eks:DescribeCluster",
-          "eks:ListClusters"
+          "eks:ListClusters",
+          "eks:CreateCluster",
+          "eks:TagResource",
+          "eks:UpdateClusterVersion",
+          "eks:UpdateClusterConfig",
+          "eks:DeleteCluster",
+          "eks:CreateNodegroup",
+          "eks:DeleteNodegroup"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "elasticloadbalancing:*",
+          "autoscaling:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:GetRole",
+          "iam:ListRoles",
+          "iam:ListRoleTags",
+          "iam:PassRole",
+          "iam:CreateServiceLinkedRole",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:DeleteRole"
         ]
         Resource = "*"
       },
