@@ -84,6 +84,7 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "iam:GetPolicyVersion",
           "iam:ListPolicyVersions",
           "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
           "iam:CreateOpenIDConnectProvider",
           "iam:GetOpenIDConnectProvider",
           "iam:DeleteOpenIDConnectProvider",
