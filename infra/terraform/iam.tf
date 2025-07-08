@@ -191,7 +191,11 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "kms:GenerateDataKey",
           "kms:Encrypt",
           "kms:Decrypt",
-          "kms:ReEncrypt*"
+          "kms:ReEncrypt*",
+          "kms:RetireGrant",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:RevokeGrant"
         ]
         Resource = "*"
       },
