@@ -24,6 +24,10 @@
       - terraform
       - aws-credentials
       - plain-credentials
+      - sonar
+      - sonar-quality-gates
+      - sonarqube-generic-coverage
+      - sonar-gerrit
     jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
     jenkins_http_port: 8080
   pre_tasks:
@@ -91,3 +95,161 @@
     - role: geerlingguy.java
     - role: geerlingguy.jenkins
       jenkins_plugins: "{{ jenkins_plugins }}"
+
+  post_tasks:
+    - name: Attendre que Jenkins soit disponible
+      uri:
+        url: http://localhost:{{ jenkins_http_port }}/api/json
+        method: GET
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+        force_basic_auth: yes
+        status_code: 200
+        timeout: 5
+      register: jenkins_api_status
+      until: jenkins_api_status.status == 200
+      retries: 30
+      delay: 10
+      
+    - name: Installer Trivy pour les scans de sécurité
+      shell: |
+        curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
+        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | tee -a /etc/apt/sources.list.d/trivy.list
+        apt-get update
+        apt-get install -y trivy
+      args:
+        creates: /usr/bin/trivy
+        
+    - name: Télécharger le CLI de SonarQube Scanner
+      get_url:
+        url: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
+        dest: /tmp/sonar-scanner-cli.zip
+        mode: '0644'
+        
+    - name: Créer le répertoire pour SonarQube Scanner
+      file:
+        path: /opt/sonar-scanner
+        state: directory
+        mode: '0755'
+        
+    - name: Extraire le SonarQube Scanner
+      unarchive:
+        src: /tmp/sonar-scanner-cli.zip
+        dest: /opt
+        remote_src: yes
+        creates: /opt/sonar-scanner-4.8.0.2856-linux
+        
+    - name: Créer un lien symbolique pour SonarQube Scanner
+      file:
+        src: /opt/sonar-scanner-4.8.0.2856-linux
+        dest: /opt/sonar-scanner
+        state: link
+        
+    - name: Ajouter SonarQube Scanner au PATH
+      copy:
+        content: 'export PATH=$PATH:/opt/sonar-scanner/bin'
+        dest: /etc/profile.d/sonarqube.sh
+        mode: '0644'
+        
+    - name: Récupérer les secrets SonarQube depuis AWS Secrets Manager
+      shell: >
+        aws secretsmanager get-secret-value 
+        --secret-id 'projet-c-devops-sonarqube-credentials' 
+        --region ca-central-1 
+        --query SecretString 
+        --output text
+      register: sonarqube_credentials
+      become: false
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+        AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+        
+    - name: Définir les variables SonarQube
+      set_fact:
+        sonarqube_host: "http://{{ lookup('env', 'SONARQUBE_IP') | default('localhost') }}:9000"
+        sonarqube_admin_username: "{{ (sonarqube_credentials.stdout | from_json).admin_username | default('admin') }}"
+        sonarqube_admin_password: "{{ (sonarqube_credentials.stdout | from_json).admin_password | default('admin') }}"
+      when: sonarqube_credentials.stdout is defined
+        
+    - name: Créer le script de configuration des outils Jenkins
+      copy:
+        content: |
+          #!/bin/bash
+          
+          # Configuration des outils dans Jenkins via Jenkins CLI
+          jenkins_url="http://localhost:{{ jenkins_http_port }}"
+          admin_user="{{ jenkins_admin_username }}"
+          admin_pass="{{ jenkins_admin_password }}"
+          
+          # Télécharger Jenkins CLI
+          wget -q ${jenkins_url}/jnlpJars/jenkins-cli.jar -O /tmp/jenkins-cli.jar
+          
+          # Fonction pour exécuter des commandes Jenkins CLI
+          run_jenkins_cli() {
+            java -jar /tmp/jenkins-cli.jar -s ${jenkins_url} -auth ${admin_user}:${admin_pass} "$@"
+          }
+          
+          # Configurer SonarQube Scanner
+          cat > /tmp/sonarqube-scanner-tool.xml << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <hudson.plugins.sonar.SonarRunnerInstallation>
+            <name>SonarQubeScanner</name>
+            <properties>
+              <hudson.tools.InstallSourceProperty>
+                <installers>
+                  <hudson.plugins.sonar.SonarRunnerInstaller>
+                    <id>4.8.0.2856</id>
+                  </hudson.plugins.sonar.SonarRunnerInstaller>
+                </installers>
+              </hudson.tools.InstallSourceProperty>
+            </properties>
+          </hudson.plugins.sonar.SonarRunnerInstallation>
+          EOF
+          
+          # Configuration du serveur SonarQube
+          cat > /tmp/sonar-server-config.xml << EOF
+          <?xml version='1.1' encoding='UTF-8'?>
+          <hudson.plugins.sonar.SonarGlobalConfiguration>
+            <installations>
+              <hudson.plugins.sonar.SonarInstallation>
+                <name>SonarQube</name>
+                <serverUrl>{{ sonarqube_host }}</serverUrl>
+                <credentialsId>sonarqube-credentials</credentialsId>
+                <mojoVersion></mojoVersion>
+                <additionalProperties></additionalProperties>
+                <additionalAnalysisProperties></additionalAnalysisProperties>
+              </hudson.plugins.sonar.SonarInstallation>
+            </installations>
+            <buildWrapperEnabled>true</buildWrapperEnabled>
+            <dataMigrated>true</dataMigrated>
+            <credentialsMigrated>true</credentialsMigrated>
+          </hudson.plugins.sonar.SonarGlobalConfiguration>
+          EOF
+          
+          # Créer les credentials SonarQube
+          cat > /tmp/sonarqube-credentials.xml << EOF
+          <com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+            <scope>GLOBAL</scope>
+            <id>sonarqube-credentials</id>
+            <description>SonarQube credentials</description>
+            <username>{{ sonarqube_admin_username }}</username>
+            <password>{{ sonarqube_admin_password }}</password>
+          </com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+          EOF
+          
+          # Appliquer les configurations
+          run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/sonarqube-credentials.xml
+          run_jenkins_cli groovy = < /tmp/sonar-server-config.xml
+          run_jenkins_cli groovy "import hudson.plugins.sonar.SonarRunnerInstallation; import hudson.tools.InstallSourceProperty; import hudson.plugins.sonar.SonarRunnerInstaller; def instance = jenkins.model.Jenkins.getInstance(); def descriptor = instance.getDescriptor(hudson.plugins.sonar.SonarRunnerInstallation.class); def installer = new SonarRunnerInstaller('4.8.0.2856'); def prop = new InstallSourceProperty([installer]); def installation = new SonarRunnerInstallation('SonarQubeScanner', '', [prop]); descriptor.setInstallations(installation); descriptor.save(); instance.save()"
+          
+          # Nettoyer les fichiers temporaires
+          rm -f /tmp/sonarqube-scanner-tool.xml /tmp/sonar-server-config.xml /tmp/sonarqube-credentials.xml
+          
+          echo "Configuration des outils terminée"
+        dest: /tmp/configure-jenkins-tools.sh
+        mode: '0755'
+        
+    - name: Exécuter le script de configuration des outils Jenkins
+      command: /tmp/configure-jenkins-tools.sh
+      args:
+        creates: /var/lib/jenkins/.sonar/sonar-scanner-4.8.0.2856

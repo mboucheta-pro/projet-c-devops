@@ -5,6 +5,13 @@ export SONARQUBE_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-i
 export SONARQUBE_ADMIN_USERNAME=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-sonarqube-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_username')
 SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
 
+# Récupérer l'adresse IP de Jenkins
+export JENKINS_IP=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=jenkins" "Name=instance-state-name,Values=running" \
+  --query "Reservations[].Instances[].PublicIpAddress" \
+  --output text \
+  --region ca-central-1)
+
 # Initaliser l'agent ssh
 cd $GITHUB_WORKSPACE/infra/ansible
 eval "$(ssh-agent -s)"

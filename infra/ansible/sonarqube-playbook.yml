@@ -62,3 +62,88 @@
       until: sonar_status.status == 200
       retries: 30
       delay: 10
+      
+    - name: Créer un script pour configurer SonarQube (token, webhook)
+      copy:
+        content: |
+          #!/bin/bash
+          
+          # Variables
+          SONAR_URL="http://localhost:9000"
+          SONAR_ADMIN_USER="{{ sonarqube_admin_username | default('admin') }}"
+          SONAR_ADMIN_PASS="{{ sonarqube_admin_password | default('admin') }}"
+          JENKINS_URL="http://{{ lookup('env', 'JENKINS_IP') | default('localhost') }}:8080"
+          
+          # Attendre que SonarQube soit complètement démarré
+          echo "Attente du démarrage complet de SonarQube..."
+          until curl -s -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" "${SONAR_URL}/api/system/status" | grep -q '"status":"UP"'; do
+            echo "SonarQube n'est pas encore prêt, nouvelle tentative dans 10 secondes..."
+            sleep 10
+          done
+          
+          # Changer le mot de passe administrateur si c'est la première installation
+          if [ "$SONAR_ADMIN_USER" = "admin" ] && [ "$SONAR_ADMIN_PASS" != "admin" ]; then
+            echo "Changement du mot de passe administrateur par défaut..."
+            curl -s -X POST -u "admin:admin" "${SONAR_URL}/api/users/change_password" \
+              -d "login=admin&previousPassword=admin&password=${SONAR_ADMIN_PASS}"
+          fi
+          
+          # Créer un token d'API pour Jenkins
+          echo "Création d'un token d'API pour Jenkins..."
+          TOKEN_RESPONSE=$(curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+            "${SONAR_URL}/api/user_tokens/generate" \
+            -d "name=jenkins-token&login=${SONAR_ADMIN_USER}")
+          
+          TOKEN=$(echo $TOKEN_RESPONSE | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+          
+          if [ -n "$TOKEN" ]; then
+            echo "Token SonarQube créé avec succès"
+            
+            # Enregistrer le token dans AWS Secrets Manager
+            if [ -n "$(command -v aws)" ]; then
+              echo "Mise à jour du secret dans AWS Secrets Manager..."
+              
+              # Récupérer le secret existant
+              EXISTING_SECRET=$(aws secretsmanager get-secret-value \
+                --secret-id projet-c-devops-sonarqube-credentials \
+                --region ca-central-1 \
+                --query SecretString \
+                --output text)
+              
+              # Ajouter le token au secret existant
+              UPDATED_SECRET=$(echo $EXISTING_SECRET | jq --arg token "$TOKEN" '. + {token: $token}')
+              
+              # Mettre à jour le secret
+              aws secretsmanager update-secret --secret-id projet-c-devops-sonarqube-credentials \
+                --secret-string "$UPDATED_SECRET" \
+                --region ca-central-1
+            else
+              echo "AWS CLI n'est pas installé, impossible de mettre à jour le secret"
+              echo "Token SonarQube: $TOKEN"
+            fi
+          else
+            echo "Échec de la création du token SonarQube"
+          fi
+          
+          # Configurer un webhook pour Jenkins
+          echo "Configuration d'un webhook SonarQube pour Jenkins..."
+          curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+            "${SONAR_URL}/api/webhooks/create" \
+            -d "name=Jenkins&url=${JENKINS_URL}/sonarqube-webhook/"
+          
+          echo "Configuration de SonarQube terminée"
+        dest: /tmp/configure-sonarqube.sh
+        mode: '0755'
+      
+    - name: Installer AWS CLI pour la mise à jour des secrets
+      apt:
+        name: awscli
+        state: present
+      
+    - name: Exécuter le script de configuration SonarQube
+      shell: /tmp/configure-sonarqube.sh
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+        AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+        AWS_DEFAULT_REGION: "ca-central-1"
+      become: false
