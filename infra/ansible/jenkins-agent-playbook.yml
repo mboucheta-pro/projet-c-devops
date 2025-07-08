@@ -224,11 +224,16 @@
         dest: /tmp/sonar-scanner.zip
         mode: '0644'
         
-    - name: Créer le répertoire pour SonarScanner
+    - name: Vérifier si le répertoire sonar-scanner existe déjà
+      stat:
+        path: /opt/sonar-scanner
+      register: sonar_scanner_dir
+        
+    - name: Supprimer le répertoire sonar-scanner s'il existe déjà
       file:
         path: /opt/sonar-scanner
-        state: directory
-        mode: '0755'
+        state: absent
+      when: sonar_scanner_dir.stat.exists and sonar_scanner_dir.stat.isdir
         
     - name: Extraire SonarScanner
       unarchive:
