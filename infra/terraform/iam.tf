@@ -208,10 +208,29 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "ecr:PutImage",
           "ecr:CreateRepository",
           "ecr:DescribeRepositories",
+          "ecr:DescribeRegistry",
+          "ecr:DescribeImages",
           "ecr:ListImages",
+          "ecr:ListTagsForResource",
+          "ecr:BatchDeleteImage",
           "ecr:DeleteRepository",
+          "ecr:DeleteRepositoryPolicy",
+          "ecr:GetLifecyclePolicy",
+          "ecr:GetRepositoryPolicy",
+          "ecr:PutLifecyclePolicy",
+          "ecr:PutImageScanningConfiguration",
+          "ecr:PutImageTagMutability",
+          "ecr:PutReplicationConfiguration",
+          "ecr:SetRepositoryPolicy",
+          "ecr:StartImageScan",
+          "ecr:StartLifecyclePolicyPreview",
           "ecr:TagResource",
-          "ecr:UntagResource"
+          "ecr:UntagResource",
+          "ecr:BatchGetRepositoryScanningConfiguration",
+          "ecr:PutRegistryPolicy",
+          "ecr:PutRepositoryPermissionsPolicy",
+          "ecr:GetRegistryPolicy",
+          "ecr:DeleteLifecyclePolicy"
         ]
         Resource = "*"
       }
