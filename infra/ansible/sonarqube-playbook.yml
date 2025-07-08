@@ -69,6 +69,11 @@
       retries: 30
       delay: 10
       
+    - name: Pause pour permettre à SonarQube de s'initialiser complètement
+      pause:
+        seconds: 30
+        prompt: "Attente de 30 secondes pour que SonarQube s'initialise complètement..."
+      
     - name: Créer un script pour configurer SonarQube (token, webhook)
       copy:
         content: |
@@ -82,10 +87,20 @@
           
           # Attendre que SonarQube soit complètement démarré
           echo "Attente du démarrage complet de SonarQube..."
-          until curl -s -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" "${SONAR_URL}/api/system/status" | grep -q '"status":"UP"'; do
-            echo "SonarQube n'est pas encore prêt, nouvelle tentative dans 10 secondes..."
+          for i in {1..12}; do
+            STATUS_RESPONSE=$(curl -s -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" "${SONAR_URL}/api/system/status")
+            echo "État de SonarQube: $STATUS_RESPONSE"
+            if echo "$STATUS_RESPONSE" | grep -q '"status":"UP"'; then
+              echo "SonarQube est prêt!"
+              break
+            fi
+            echo "SonarQube n'est pas encore prêt, nouvelle tentative dans 10 secondes... ($i/12)"
             sleep 10
           done
+          
+          # Attendre 10 secondes supplémentaires pour être sûr que tous les services sont opérationnels
+          echo "Attente supplémentaire pour s'assurer que tous les services SonarQube sont opérationnels..."
+          sleep 10
           
           # Changer le mot de passe administrateur si c'est la première installation
           if [ "$SONAR_ADMIN_USER" = "admin" ] && [ "$SONAR_ADMIN_PASS" != "admin" ]; then
@@ -96,17 +111,38 @@
           
           # Créer un token d'API pour Jenkins
           echo "Création d'un token d'API pour Jenkins..."
-          TOKEN_RESPONSE=$(curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
-            "${SONAR_URL}/api/user_tokens/generate" \
-            -d "name=jenkins-token&login=${SONAR_ADMIN_USER}")
+          # Ajouter un délai pour s'assurer que SonarQube est complètement initialisé
+          sleep 10
           
+          # Vérifier si un token jenkins-token existe déjà et le révoquer
+          echo "Vérification des tokens existants..."
+          EXISTING_TOKENS=$(curl -s -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+            "${SONAR_URL}/api/user_tokens/search")
+          echo "Tokens existants: $EXISTING_TOKENS"
+          
+          # Révoquer le token jenkins-token s'il existe
+          if echo "$EXISTING_TOKENS" | grep -q "jenkins-token"; then
+            echo "Révocation du token jenkins-token existant..."
+            curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+              "${SONAR_URL}/api/user_tokens/revoke" \
+              -d "name=jenkins-token"
+          fi
+          
+          # Génération du nouveau token avec plus d'informations de débogage
+          echo "Génération du nouveau token..."
+          TOKEN_RESPONSE=$(curl -v -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+            "${SONAR_URL}/api/user_tokens/generate" \
+            -d "name=jenkins-token")
+          
+          echo "Réponse complète: $TOKEN_RESPONSE"
           TOKEN=$(echo $TOKEN_RESPONSE | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
           
           if [ -n "$TOKEN" ]; then
-            echo "Token SonarQube créé avec succès"
-               # Vérifier si aws cli est disponible, sinon utiliser la sortie standard
-          if command -v aws >/dev/null 2>&1; then
-            echo "Mise à jour du secret dans AWS Secrets Manager..."
+            echo "Token SonarQube créé avec succès: $TOKEN"
+            
+            # Vérifier si aws cli est disponible, sinon utiliser la sortie standard
+            if command -v aws >/dev/null 2>&1; then
+              echo "Mise à jour du secret dans AWS Secrets Manager..."
             
             # Récupérer le secret existant
             EXISTING_SECRET=$(aws secretsmanager get-secret-value \
@@ -149,9 +185,30 @@
           
           # Configurer un webhook pour Jenkins
           echo "Configuration d'un webhook SonarQube pour Jenkins..."
-          curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+          
+          # Vérifier les webhooks existants
+          EXISTING_WEBHOOKS=$(curl -s -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+            "${SONAR_URL}/api/webhooks/list")
+          
+          echo "Webhooks existants: $EXISTING_WEBHOOKS"
+          
+          # Supprimer le webhook Jenkins s'il existe déjà
+          if echo "$EXISTING_WEBHOOKS" | grep -q "Jenkins"; then
+            WEBHOOK_KEY=$(echo "$EXISTING_WEBHOOKS" | grep -o '"key":"[^"]*","name":"Jenkins"' | cut -d'"' -f4)
+            if [ -n "$WEBHOOK_KEY" ]; then
+              echo "Suppression du webhook Jenkins existant..."
+              curl -s -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
+                "${SONAR_URL}/api/webhooks/delete" \
+                -d "webhook=${WEBHOOK_KEY}"
+            fi
+          fi
+          
+          # Créer le webhook
+          WEBHOOK_RESPONSE=$(curl -v -X POST -u "${SONAR_ADMIN_USER}:${SONAR_ADMIN_PASS}" \
             "${SONAR_URL}/api/webhooks/create" \
-            -d "name=Jenkins&url=${JENKINS_URL}/sonarqube-webhook/"
+            -d "name=Jenkins&url=${JENKINS_URL}/sonarqube-webhook/")
+          
+          echo "Réponse webhook: $WEBHOOK_RESPONSE"
           
           echo "Configuration de SonarQube terminée"
         dest: /tmp/configure-sonarqube.sh
