@@ -143,12 +143,3 @@
         password: "{{ jenkins_admin_password }}"
       when: aws_credentials_base64 != ""
       ignore_errors: yes
-        
-    - name: Création du pipeline Infrastructure
-      jenkins_job:
-        name: "Infrastructure-Pipeline"
-        config: "{{ lookup('template', 'templates/infrastructure-pipeline.xml.j2') }}"
-        url: http://localhost:{{ jenkins_http_port }}
-        user: "{{ jenkins_admin_username }}"
-        password: "{{ jenkins_admin_password }}"
-      ignore_errors: yes
