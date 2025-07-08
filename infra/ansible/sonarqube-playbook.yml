@@ -27,6 +27,8 @@
           - docker-compose
           - python3-pip
           - python3-setuptools
+          - python3-venv
+          - pipx
           - jq
           - curl
         state: present
@@ -102,17 +104,16 @@
           
           if [ -n "$TOKEN" ]; then
             echo "Token SonarQube créé avec succès"
+               # Vérifier si aws cli est disponible, sinon utiliser la sortie standard
+          if command -v aws >/dev/null 2>&1; then
+            echo "Mise à jour du secret dans AWS Secrets Manager..."
             
-            # Vérifier si aws cli est disponible, sinon utiliser la sortie standard
-            if command -v aws >/dev/null 2>&1; then
-              echo "Mise à jour du secret dans AWS Secrets Manager..."
-              
-              # Récupérer le secret existant
-              EXISTING_SECRET=$(aws secretsmanager get-secret-value \
-                --secret-id projet-c-devops-sonarqube-credentials \
-                --region ca-central-1 \
-                --query SecretString \
-                --output text 2>/dev/null)
+            # Récupérer le secret existant
+            EXISTING_SECRET=$(aws secretsmanager get-secret-value \
+              --secret-id projet-c-devops-sonarqube-credentials \
+              --region ca-central-1 \
+              --query SecretString \
+              --output text 2>/dev/null)
               
               if [ $? -eq 0 ] && [ -n "$EXISTING_SECRET" ]; then
                 # Ajouter le token au secret existant si jq est disponible
@@ -162,13 +163,26 @@
         state: present
         update_cache: yes
       with_items:
-        - python3-pip
-        - python3-setuptools
+        - unzip
+        - curl
       
-    - name: Installer AWS CLI via pip
-      pip:
-        name: awscli
-        state: present
+    - name: Télécharger AWS CLI v2
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+      
+    - name: Extraire AWS CLI v2
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+        creates: /tmp/aws
+      
+    - name: Installer AWS CLI v2
+      command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
       register: pip_aws_result
       ignore_errors: yes
       
