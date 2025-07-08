@@ -63,7 +63,11 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "iam:ListPolicies",
           "iam:PutRolePolicy",
           "iam:GetPolicy",
-          "iam:DeletePolicy"
+          "iam:DeletePolicy",
+          "iam:TagRole",
+          "iam:TagPolicy",
+          "iam:UntagRole",
+          "iam:UntagPolicy"
         ]
         Resource = "*"
       },
@@ -76,7 +80,9 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "secretsmanager:PutSecretValue",
           "secretsmanager:UpdateSecret",
           "secretsmanager:DeleteSecret",
-          "secretsmanager:TagResource"
+          "secretsmanager:TagResource",
+          "secretsmanager:GetResourcePolicy",
+          "secretsmanager:PutResourcePolicy"
         ]
         Resource = [
           aws_secretsmanager_secret.jenkins_credentials.arn,
@@ -130,7 +136,10 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "logs:PutLogEvents",
           "logs:DescribeLogGroups",
           "logs:DescribeLogStreams",
-          "logs:DeleteLogGroup"
+          "logs:DeleteLogGroup",
+          "logs:TagResource",
+          "logs:UntagResource",
+          "logs:TagLogGroup"
         ]
         Resource = "*"
       }
