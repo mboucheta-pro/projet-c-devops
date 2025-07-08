@@ -34,6 +34,19 @@ cat inventory_sonarqube.yml
 ansible-playbook -i inventory_sonarqube.yml sonarqube-playbook.yml -v
 
 # Nettoyer les fichiers temporaires
-rm -f inventory_jenkins.yml
+rm -f inventory_sonarqube.yml
 
 echo "Déploiement Sonarqube terminé"
+echo
+echo "===================================================="
+echo "IMPORTANT: Configuration manuelle requise"
+echo "===================================================="
+echo "SonarQube est accessible à l'adresse: http://$SONARQUBE_IP:9000"
+echo "Identifiants par défaut: admin/admin"
+echo
+echo "Pour configurer l'intégration avec Jenkins:"
+echo "1. Connectez-vous à SonarQube et créez un token dans votre profil utilisateur"
+echo "2. Stockez ce token dans AWS Secrets Manager en créant un secret nommé SONARQUBE_TOKEN"
+echo "3. Configurez le serveur SonarQube dans Jenkins (Manage Jenkins > Configure System)"
+echo "4. Configurez un webhook dans SonarQube pointant vers Jenkins: http://$JENKINS_IP:8080/sonarqube-webhook/"
+echo "===================================================="
