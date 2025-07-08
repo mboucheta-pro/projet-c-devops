@@ -95,8 +95,8 @@ jobs:
       - name: Configure Jenkins master
         if: github.event.inputs.configure_jenkins_master == 'true'
         run: |
-          chmod +x scripts/deploy_jenkins.sh
-          ./scripts/deploy_jenkins.sh
+          chmod +x scripts/deploy_jenkins_master.sh
+          ./scripts/deploy_jenkins_master.sh
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
 
