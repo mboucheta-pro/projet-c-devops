@@ -34,7 +34,19 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "eks:UpdateClusterConfig",
           "eks:DeleteCluster",
           "eks:CreateNodegroup",
-          "eks:DeleteNodegroup"
+          "eks:DeleteNodegroup",
+          "eks:DescribeNodegroup",
+          "eks:ListNodegroups",
+          "eks:UpdateNodegroupConfig",
+          "eks:UpdateNodegroupVersion",
+          "eks:DescribeAddonVersions",
+          "eks:ListAddons",
+          "eks:CreateAddon",
+          "eks:DescribeAddon",
+          "eks:DeleteAddon",
+          "eks:UpdateAddon",
+          "eks:TagResource",
+          "eks:UntagResource"
         ]
         Resource = "*"
       },
@@ -71,7 +83,13 @@ resource "aws_iam_role_policy" "cicd_instances" {
           "iam:ListRolePolicies",
           "iam:GetPolicyVersion",
           "iam:ListPolicyVersions",
-          "iam:ListAttachedRolePolicies"
+          "iam:ListAttachedRolePolicies",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:GetOpenIDConnectProvider",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:TagOpenIDConnectProvider",
+          "iam:ListOpenIDConnectProviders",
+          "iam:ListOpenIDConnectProviderTags"
         ]
         Resource = "*"
       },
