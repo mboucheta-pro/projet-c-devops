@@ -7,12 +7,31 @@
       - openjdk-17-jdk
     jenkins_agent_user: jenkins
     jenkins_agent_home: /home/jenkins
+    terraform_version: "1.5.7"
+    kubectl_version: "1.28.6"
+    docker_compose_version: "2.24.6"
+    sonar_scanner_version: "5.0.1.3006"
+    trivy_version: "0.46.1"
   tasks:
-    - name: Installer Java
+    - name: Mettre à jour le cache APT
       apt:
-        name: "{{ java_packages }}"
-        state: present
         update_cache: yes
+
+    - name: Installer les dépendances de base
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - unzip
+          - jq
+          - git
+          - wget
+          - python3-pip
+        state: present
 
     - name: Activer NTP avec timedatectl
       become: yes
