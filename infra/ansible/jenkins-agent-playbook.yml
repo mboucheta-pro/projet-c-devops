@@ -65,33 +65,98 @@
             owner: "{{ jenkins_agent_user }}"
             group: "{{ jenkins_agent_user }}"
 
-        - name: Get agent secret
+        - name: Get Jenkins credentials from environment
+          set_fact:
+            jenkins_admin_user: "{{ lookup('env', 'JENKINS_ADMIN_USERNAME') | default('admin') }}"
+            jenkins_admin_password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') | default('admin') }}"
+            jenkins_master_ip: "{{ lookup('env', 'JENKINS_IP') }}"
+
+        - name: Wait for Jenkins to be ready
           uri:
-            url: "http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/computer/{{ inventory_hostname }}/slave-agent.jnlp"
+            url: "http://{{ jenkins_master_ip }}:8080/login"
+            method: GET
+            timeout: 30
+          retries: 10
+          delay: 30
+          register: jenkins_ready
+
+        - name: Create Jenkins node via API
+          uri:
+            url: "http://{{ jenkins_master_ip }}:8080/computer/doCreateItem"
+            method: POST
+            user: "{{ jenkins_admin_user }}"
+            password: "{{ jenkins_admin_password }}"
+            force_basic_auth: yes
+            body_format: form-urlencoded
+            body:
+              name: "jenkins-agent"
+              type: "hudson.slaves.DumbSlave"
+              json: |
+                {
+                  "name": "jenkins-agent",
+                  "nodeDescription": "Jenkins Agent Node",
+                  "numExecutors": "2",
+                  "remoteFS": "{{ jenkins_agent_home }}/workspace",
+                  "labelString": "agent docker",
+                  "mode": "NORMAL",
+                  "launcher": {
+                    "stapler-class": "hudson.slaves.JNLPLauncher",
+                    "$class": "hudson.slaves.JNLPLauncher",
+                    "workDirSettings": {
+                      "disabled": false,
+                      "workDirPath": "{{ jenkins_agent_home }}/workspace",
+                      "internalDir": "remoting"
+                    }
+                  },
+                  "retentionStrategy": {
+                    "stapler-class": "hudson.slaves.RetentionStrategy$Always",
+                    "$class": "hudson.slaves.RetentionStrategy$Always"
+                  },
+                  "nodeProperties": {
+                    "stapler-class-bag": "true"
+                  }
+                }
+            status_code: [200, 302]
+          ignore_errors: yes
+
+        - name: Get agent secret via API
+          uri:
+            url: "http://{{ jenkins_master_ip }}:8080/computer/jenkins-agent/slave-agent.jnlp"
+            method: GET
+            user: "{{ jenkins_admin_user }}"
+            password: "{{ jenkins_admin_password }}"
+            force_basic_auth: yes
             return_content: yes
           register: agent_jnlp
+          retries: 3
+          delay: 10
 
-        - name: Extract secret
+        - name: Extract secret from JNLP
           set_fact:
-            jenkins_agent_secret: "{{ agent_jnlp.content | regex_search('<argument>([a-f0-9]+)</argument>') | regex_replace('</?argument>', '') }}"
+            jenkins_agent_secret: "{{ agent_jnlp.content | regex_search('<argument>([a-f0-9]+)</argument>', '\\1') | first }}"
+          when: agent_jnlp is defined and agent_jnlp.content is defined
 
         - name: Download agent.jar
           get_url:
-            url: "http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/jnlpJars/agent.jar"
+            url: "http://{{ jenkins_master_ip }}:8080/jnlpJars/agent.jar"
             dest: "{{ jenkins_agent_home }}/agent/agent.jar"
             owner: "{{ jenkins_agent_user }}"
             group: "{{ jenkins_agent_user }}"
+            force_basic_auth: yes
+            url_username: "{{ jenkins_admin_user }}"
+            url_password: "{{ jenkins_admin_password }}"
 
         - name: Create start script
           copy:
             content: |
               #!/bin/bash
               cd {{ jenkins_agent_home }}/agent
-              java -jar agent.jar -jnlpUrl http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/computer/{{ inventory_hostname }}/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}
+              java -jar agent.jar -jnlpUrl http://{{ jenkins_master_ip }}:8080/computer/jenkins-agent/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}/workspace
             dest: "{{ jenkins_agent_home }}/start-agent.sh"
             owner: "{{ jenkins_agent_user }}"
             group: "{{ jenkins_agent_user }}"
             mode: '0755'
+          when: jenkins_agent_secret is defined
 
         - name: Create systemd service
           copy:
@@ -105,21 +170,30 @@
               User={{ jenkins_agent_user }}
               ExecStart={{ jenkins_agent_home }}/start-agent.sh
               Restart=always
+              RestartSec=10
 
               [Install]
               WantedBy=multi-user.target
             dest: /etc/systemd/system/jenkins-agent.service
+          when: jenkins_agent_secret is defined
 
-    # Docker (même méthode que master)
+        - name: Create workspace directory
+          file:
+            path: "{{ jenkins_agent_home }}/workspace"
+            state: directory
+            owner: "{{ jenkins_agent_user }}"
+            group: "{{ jenkins_agent_user }}"
+
+    # Docker (même méthode que les autres playbooks)
     - name: Install Docker
-      apt:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
-        update_cache: yes
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+        apt-get update
+        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      timeout: 300
+      retries: 2
+      delay: 10
 
     - name: Setup Docker for Jenkins
       block:
@@ -135,9 +209,19 @@
             groups: docker
             append: yes
 
-        - name: Start Jenkins agent
+        - name: Start Jenkins agent service
           systemd:
             name: jenkins-agent
             enabled: yes
             state: started
             daemon_reload: yes
+          when: jenkins_agent_secret is defined
+
+    - name: Display Jenkins agent info
+      debug:
+        msg: 
+          - "✅ Jenkins Agent configured"
+          - "🔗 Connect to Jenkins master at: http://{{ jenkins_master_ip }}:8080"
+          - "👤 Agent user: {{ jenkins_agent_user }}"
+          - "📁 Agent home: {{ jenkins_agent_home }}"
+      when: jenkins_agent_secret is defined
