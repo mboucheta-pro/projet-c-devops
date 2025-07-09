@@ -19,7 +19,7 @@ resource "aws_instance" "jenkins" {
   }
 
   tags = {
-    Name = "${var.project_name}-jenkins"
+    Name = "${var.project_name}-jenkins-master"
   }
 
   lifecycle {
