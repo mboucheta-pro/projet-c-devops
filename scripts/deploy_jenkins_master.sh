@@ -39,10 +39,10 @@ ansible-galaxy install geerlingguy.jenkins --force
 mkdir -p vars
 
 # Vérifier la syntaxe du playbook
-ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml --syntax-check
+ansible-playbook -i inventory_jenkins.yml jenkins-master-playbook.yml --syntax-check
 
 # Déployer Jenkins master
-ansible-playbook -i inventory_jenkins.yml jenkins-playbook.yml -v
+ansible-playbook -i inventory_jenkins.yml jenkins-master-playbook.yml -v
 
 # Nettoyer les fichiers temporaires
 rm -f inventory_jenkins.yml

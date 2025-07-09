@@ -39,25 +39,40 @@
           - ca-certificates
           - gnupg
           - lsb-release
+          - xz-utils
         state: present
 
-    # Installation de Node.js via NodeSource
-    - name: Ajouter la clé GPG NodeSource
-      apt_key:
-        url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
-        state: present
+    # Installation moderne de Node.js via les binaires officiels
+    - name: Créer le répertoire pour Node.js
+      file:
+        path: /opt/nodejs
+        state: directory
+        mode: '0755'
 
-    - name: Ajouter le dépôt NodeSource pour Node.js 18.x
-      apt_repository:
-        repo: "deb https://deb.nodesource.com/node_18.x {{ ansible_distribution_release }} main"
-        state: present
-        update_cache: yes
+    - name: Télécharger Node.js {{ node_version }}
+      get_url:
+        url: "https://nodejs.org/dist/v{{ node_version }}/node-v{{ node_version }}-linux-x64.tar.xz"
+        dest: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
+        mode: '0644'
 
-    - name: Installer Node.js
-      apt:
-        name: nodejs
-        state: present
-        update_cache: yes
+    - name: Extraire Node.js
+      unarchive:
+        src: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
+        dest: /opt/nodejs
+        remote_src: yes
+        creates: "/opt/nodejs/node-v{{ node_version }}-linux-x64"
+        extra_opts: [--strip-components=1]
+
+    - name: Créer des liens symboliques pour Node.js et npm
+      file:
+        src: "/opt/nodejs/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+        force: yes
+      loop:
+        - node
+        - npm
+        - npx
 
     - name: Vérifier l'installation de Node.js et npm
       command: "{{ item }}"
@@ -69,19 +84,28 @@
 
     - name: Afficher les versions installées
       debug:
-        msg: "{{ item.stdout }}"
+        msg: "{{ item.cmd[0] }}: {{ item.stdout }}"
       loop: "{{ node_check.results }}"
 
     # Installation de Docker pour Jenkins master
-    - name: Ajouter la clé GPG Docker
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+    - name: Créer le répertoire pour les clés Docker
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-    - name: Ajouter le dépôt Docker
+    - name: Télécharger et installer la clé GPG Docker (moderne)
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Ajouter le dépôt Docker (moderne)
       apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
+        filename: docker
 
     - name: Installer Docker
       apt:
