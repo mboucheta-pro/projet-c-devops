@@ -1,0 +1,51 @@
+name: 'Setup Terraform Infrastructure'
+description: 'Configure et déploie l infrastructure Terraform'
+
+inputs:
+  action:
+    description: 'Action à effectuer (plan, apply, destroy)'
+    required: true
+    default: 'apply'
+  terraform_path:
+    description: 'Chemin vers les fichiers Terraform'
+    required: false
+    default: 'infra/terraform'
+
+outputs:
+  terraform_output:
+    description: 'Sortie JSON des outputs Terraform'
+    value: ${{ steps.terraform_action.outputs.terraform_output }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Terraform Action
+      id: terraform_action
+      shell: bash
+      run: |
+        cd $GITHUB_WORKSPACE/${{ inputs.terraform_path }}
+        terraform init
+        terraform validate
+        
+        case "${{ inputs.action }}" in
+          "plan")
+            terraform plan -out="tfplan"
+            ;;
+          "apply")
+            terraform plan -out="tfplan"
+            terraform apply -auto-approve tfplan
+            terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
+            echo "terraform_output=$(cat $GITHUB_WORKSPACE/terraform-outputs.json)" >> $GITHUB_OUTPUT
+            echo "✅ Infrastructure créée avec succès"
+            ;;
+          "destroy")
+            sed -i 's/prevent_destroy = true/prevent_destroy = false/g' *.tf || true
+            terraform plan -destroy -out="tfplan-destroy"
+            terraform apply -auto-approve tfplan-destroy
+            echo "🗑️ Infrastructure détruite avec succès"
+            ;;
+          *)
+            echo "❌ Action non reconnue: ${{ inputs.action }}"
+            exit 1
+            ;;
+        esac

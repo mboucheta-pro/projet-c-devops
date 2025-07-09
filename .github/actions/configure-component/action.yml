@@ -1,0 +1,47 @@
+name: 'Configure Component'
+description: 'Configure un composant spécifique de l infrastructure'
+
+inputs:
+  component:
+    description: 'Composant à configurer (sonarqube, jenkins-master, jenkins-agent)'
+    required: true
+  component_ip:
+    description: 'IP du composant à configurer'
+    required: true
+  should_configure:
+    description: 'Indique si le composant doit être configuré'
+    required: true
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure Component
+      if: inputs.should_configure == 'true'
+      shell: bash
+      run: |
+        echo "🔧 Configuration de ${{ inputs.component }} sur ${{ inputs.component_ip }}"
+        
+        case "${{ inputs.component }}" in
+          "sonarqube")
+            chmod +x scripts/deploy_sonarqube.sh
+            ./scripts/deploy_sonarqube.sh
+            echo "✅ SonarQube configuré avec succès: http://${{ inputs.component_ip }}:9000"
+            ;;
+          "jenkins-master")
+            chmod +x scripts/deploy_jenkins_master.sh
+            ./scripts/deploy_jenkins_master.sh
+            echo "✅ Jenkins Master configuré avec succès: http://${{ inputs.component_ip }}:8080"
+            ;;
+          "jenkins-agent")
+            chmod +x scripts/deploy_jenkins_agent.sh
+            ./scripts/deploy_jenkins_agent.sh
+            echo "✅ Jenkins Agent configuré avec succès et connecté au master"
+            ;;
+          *)
+            echo "❌ Composant non reconnu: ${{ inputs.component }}"
+            exit 1
+            ;;
+        esac
+      env:
+        ANSIBLE_HOST_KEY_CHECKING: False

@@ -1,0 +1,44 @@
+name: 'Get Infrastructure IPs'
+description: 'Récupère les IPs des composants depuis les outputs Terraform'
+
+outputs:
+  jenkins_ip:
+    description: 'IP du serveur Jenkins Master'
+    value: ${{ steps.get_ips.outputs.jenkins_ip }}
+  jenkins_agent_ip:
+    description: 'IP du serveur Jenkins Agent'
+    value: ${{ steps.get_ips.outputs.jenkins_agent_ip }}
+  sonarqube_ip:
+    description: 'IP du serveur SonarQube'
+    value: ${{ steps.get_ips.outputs.sonarqube_ip }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get Infrastructure IPs
+      id: get_ips
+      shell: bash
+      run: |
+        cd $GITHUB_WORKSPACE/infra/terraform
+        terraform init
+        
+        # Récupération des IPs depuis les outputs Terraform
+        if terraform output jenkins_ip >/dev/null 2>&1; then
+          JENKINS_IP=$(terraform output jenkins_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+          echo "jenkins_ip=$JENKINS_IP" >> $GITHUB_OUTPUT
+          echo "JENKINS_IP=$JENKINS_IP" >> $GITHUB_ENV
+        fi
+        
+        if terraform output jenkins_agent_ip >/dev/null 2>&1; then
+          JENKINS_AGENT_IP=$(terraform output jenkins_agent_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+          echo "jenkins_agent_ip=$JENKINS_AGENT_IP" >> $GITHUB_OUTPUT
+          echo "JENKINS_AGENT_IP=$JENKINS_AGENT_IP" >> $GITHUB_ENV
+        fi
+        
+        if terraform output sonarqube_ip >/dev/null 2>&1; then
+          SONARQUBE_IP=$(terraform output sonarqube_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+          echo "sonarqube_ip=$SONARQUBE_IP" >> $GITHUB_OUTPUT
+          echo "SONARQUBE_IP=$SONARQUBE_IP" >> $GITHUB_ENV
+        fi
+        
+        echo "✅ Récupération des IPs terminée"
