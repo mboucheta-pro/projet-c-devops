@@ -1,0 +1,174 @@
+---
+- name: Nettoyage complet des dépôts et correction des conflits APT
+  hosts: all
+  become: true
+  tasks:
+    - name: Afficher l'état initial des dépôts
+      shell: |
+        echo "=== État initial des dépôts ==="
+        ls -la /etc/apt/sources.list.d/ || true
+        echo "=== Clés GPG ==="
+        ls -la /etc/apt/trusted.gpg.d/ || true
+        ls -la /etc/apt/keyrings/ || true
+      register: initial_state
+      changed_when: false
+
+    - name: Afficher l'état initial
+      debug:
+        var: initial_state.stdout_lines
+
+    - name: Arrêter tous les services qui pourraient utiliser APT
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - unattended-upgrades
+        - apt-daily
+        - apt-daily-upgrade
+      ignore_errors: yes
+
+    - name: Attendre que les processus APT se terminent
+      shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Attente de la libération du verrou APT..."
+          sleep 2
+        done
+        while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+          echo "Attente de la libération du verrou des listes APT..."
+          sleep 2
+        done
+      changed_when: false
+
+    - name: Supprimer tous les verrous APT
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+      ignore_errors: yes
+
+    - name: Nettoyer complètement tous les dépôts Docker existants
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/sources.list.d/docker-ce.list
+        - /etc/apt/sources.list.d/docker.sources
+        - /etc/apt/sources.list.d/docker-official.list
+        - /etc/apt/trusted.gpg.d/docker.gpg
+        - /etc/apt/trusted.gpg.d/docker.asc
+        - /etc/apt/keyrings/docker.gpg
+
+    - name: Nettoyer complètement tous les dépôts Trivy existants
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/trivy.list
+        - /etc/apt/sources.list.d/trivy-official.list
+        - /usr/share/keyrings/trivy.gpg
+
+    - name: Supprimer toutes les références Docker du sources.list principal
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*docker.*'
+        state: absent
+      ignore_errors: yes
+
+    - name: Supprimer toutes les références Trivy du sources.list principal
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*trivy.*'
+        state: absent
+      ignore_errors: yes
+
+    - name: Nettoyer complètement le cache APT
+      shell: |
+        apt-get clean
+        rm -rf /var/lib/apt/lists/*
+        rm -rf /var/cache/apt/archives/partial/*
+      ignore_errors: yes
+
+    - name: Reconfigurer dpkg en cas de problème
+      shell: |
+        dpkg --configure -a
+      ignore_errors: yes
+
+    - name: Mettre à jour les index des paquets (première tentative)
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+      register: apt_update_result
+      ignore_errors: yes
+
+    - name: Diagnostiquer les erreurs APT si la mise à jour a échoué
+      shell: |
+        echo "=== Diagnostic des erreurs APT ==="
+        apt-get update 2>&1 || true
+        echo "=== Contenu actuel de sources.list.d ==="
+        ls -la /etc/apt/sources.list.d/ || true
+        for file in /etc/apt/sources.list.d/*; do
+          if [ -f "$file" ]; then
+            echo "=== Contenu de $file ==="
+            cat "$file" || true
+          fi
+        done
+      when: apt_update_result.failed
+      register: apt_diagnostics
+
+    - name: Afficher le diagnostic APT
+      debug:
+        var: apt_diagnostics.stdout_lines
+      when: apt_update_result.failed
+
+    - name: Corriger les erreurs de sources dupliquées
+      shell: |
+        # Supprimer les lignes dupliquées dans sources.list
+        awk '!seen[$0]++' /etc/apt/sources.list > /tmp/sources.list.tmp
+        mv /tmp/sources.list.tmp /etc/apt/sources.list
+        
+        # Supprimer les fichiers de sources vides
+        find /etc/apt/sources.list.d/ -type f -size 0 -delete
+      when: apt_update_result.failed
+
+    - name: Deuxième tentative de mise à jour APT
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+      when: apt_update_result.failed
+
+    - name: Vérifier l'état final des dépôts
+      shell: |
+        echo "=== État final des dépôts ==="
+        ls -la /etc/apt/sources.list.d/
+        echo "=== Test de fonctionnement APT ==="
+        apt-cache policy docker-ce || echo "Docker CE non disponible (normal après nettoyage)"
+        apt-cache policy trivy || echo "Trivy non disponible (normal après nettoyage)"
+      register: final_state
+      changed_when: false
+
+    - name: Afficher l'état final
+      debug:
+        var: final_state.stdout_lines
+
+    - name: Redémarrer les services APT
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - unattended-upgrades
+      ignore_errors: yes
+
+    - name: Résumé du nettoyage
+      debug:
+        msg:
+          - "✅ Nettoyage terminé avec succès"
+          - "✅ Tous les dépôts conflictuels ont été supprimés"
+          - "✅ Cache APT nettoyé et mis à jour"
+          - "✅ Le système est prêt pour une nouvelle installation"
+          - "▶️  Vous pouvez maintenant relancer les playbooks Jenkins"

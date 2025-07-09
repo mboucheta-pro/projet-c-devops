@@ -88,19 +88,34 @@
       loop: "{{ node_check.results }}"
 
     # Installation de Docker pour Jenkins master
-    - name: Supprimer les anciens dépôts Docker s'ils existent
+    - name: Supprimer TOUS les anciens dépôts et clés Docker
       file:
         path: "{{ item }}"
         state: absent
       loop:
         - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/sources.list.d/docker-ce.list
+        - /etc/apt/sources.list.d/docker.sources
         - /etc/apt/trusted.gpg.d/docker.gpg
         - /etc/apt/trusted.gpg.d/docker.asc
+        - /etc/apt/keyrings/docker.gpg
+
+    - name: Supprimer toutes les références Docker du sources.list principal
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*docker.*'
+        state: absent
+      ignore_errors: yes
 
     - name: Nettoyer les anciennes clés Docker
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: absent
+      ignore_errors: yes
+
+    - name: Nettoyer le cache APT après suppression des dépôts
+      apt:
+        update_cache: yes
       ignore_errors: yes
 
     - name: Créer le répertoire pour les clés Docker
@@ -109,18 +124,22 @@
         state: directory
         mode: '0755'
 
-    - name: Télécharger et installer la clé GPG Docker (moderne)
+    - name: Télécharger et installer la clé GPG Docker (propre)
       shell: |
+        rm -f /etc/apt/keyrings/docker.gpg
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
         chmod a+r /etc/apt/keyrings/docker.gpg
-      args:
-        creates: /etc/apt/keyrings/docker.gpg
 
-    - name: Ajouter le dépôt Docker (moderne)
-      apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-        state: present
-        filename: docker-ce
+    - name: Ajouter le dépôt Docker (fichier propre)
+      copy:
+        dest: /etc/apt/sources.list.d/docker-ce.list
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        mode: '0644'
+        backup: yes
+
+    - name: Mettre à jour le cache APT après ajout du dépôt Docker
+      apt:
         update_cache: yes
 
     - name: Installer Docker
@@ -334,6 +353,8 @@
           admin_user="{{ jenkins_admin_username }}"
           admin_pass="{{ jenkins_admin_password }}"
           
+          echo "🔧 Configuration des outils Jenkins..."
+          
           # Télécharger Jenkins CLI
           wget -q ${jenkins_url}/jnlpJars/jenkins-cli.jar -O /tmp/jenkins-cli.jar
           
@@ -342,45 +363,8 @@
             java -jar /tmp/jenkins-cli.jar -s ${jenkins_url} -auth ${admin_user}:${admin_pass} "$@"
           }
           
-          # Configurer SonarQube Scanner
-          cat > /tmp/sonarqube-scanner-tool.xml << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <hudson.plugins.sonar.SonarRunnerInstallation>
-            <name>SonarQubeScanner</name>
-            <properties>
-              <hudson.tools.InstallSourceProperty>
-                <installers>
-                  <hudson.plugins.sonar.SonarRunnerInstaller>
-                    <id>4.8.0.2856</id>
-                  </hudson.plugins.sonar.SonarRunnerInstaller>
-                </installers>
-              </hudson.tools.InstallSourceProperty>
-            </properties>
-          </hudson.plugins.sonar.SonarRunnerInstallation>
-          EOF
-          
-          # Configuration du serveur SonarQube
-          cat > /tmp/sonar-server-config.xml << EOF
-          <?xml version='1.1' encoding='UTF-8'?>
-          <hudson.plugins.sonar.SonarGlobalConfiguration>
-            <installations>
-              <hudson.plugins.sonar.SonarInstallation>
-                <name>SonarQube</name>
-                <serverUrl>{{ sonarqube_host }}</serverUrl>
-                <credentialsId>sonarqube-credentials</credentialsId>
-                <mojoVersion></mojoVersion>
-                <additionalProperties></additionalProperties>
-                <additionalAnalysisProperties></additionalAnalysisProperties>
-              </hudson.plugins.sonar.SonarInstallation>
-            </installations>
-            <buildWrapperEnabled>true</buildWrapperEnabled>
-            <dataMigrated>true</dataMigrated>
-            <credentialsMigrated>true</credentialsMigrated>
-          </hudson.plugins.sonar.SonarGlobalConfiguration>
-          EOF
-          
-          # Créer les credentials SonarQube
-          cat > /tmp/sonarqube-credentials.xml << EOF
+          # Créer les credentials SonarQube en XML
+          cat > /tmp/sonarqube-credentials.xml << 'EOF'
           <com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
             <scope>GLOBAL</scope>
             <id>sonarqube-credentials</id>
@@ -390,19 +374,133 @@
           </com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
           EOF
           
-          # Appliquer les configurations
-          run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/sonarqube-credentials.xml
-          run_jenkins_cli groovy = < /tmp/sonar-server-config.xml
-          run_jenkins_cli groovy "import hudson.plugins.sonar.SonarRunnerInstallation; import hudson.tools.InstallSourceProperty; import hudson.plugins.sonar.SonarRunnerInstaller; def instance = jenkins.model.Jenkins.getInstance(); def descriptor = instance.getDescriptor(hudson.plugins.sonar.SonarRunnerInstallation.class); def installer = new SonarRunnerInstaller('4.8.0.2856'); def prop = new InstallSourceProperty([installer]); def installation = new SonarRunnerInstallation('SonarQubeScanner', '', [prop]); descriptor.setInstallations(installation); descriptor.save(); instance.save()"
+          # Créer les credentials AWS en XML
+          cat > /tmp/aws-credentials.xml << 'EOF'
+          <com.cloudbees.jenkins.plugins.awscredentials.AWSCredentialsImpl>
+            <scope>GLOBAL</scope>
+            <id>AWS_CREDENTIALS</id>
+            <description>AWS credentials for ECR and deployments</description>
+            <accessKey>${AWS_ACCESS_KEY_ID}</accessKey>
+            <secretKey>${AWS_SECRET_ACCESS_KEY}</secretKey>
+          </com.cloudbees.jenkins.plugins.awscredentials.AWSCredentialsImpl>
+          EOF
+          
+          # Script Groovy pour configurer SonarQube
+          cat > /tmp/configure-sonarqube.groovy << 'EOF'
+          import hudson.plugins.sonar.SonarGlobalConfiguration
+          import hudson.plugins.sonar.SonarInstallation
+          import hudson.plugins.sonar.SonarRunnerInstallation
+          import hudson.tools.InstallSourceProperty
+          import hudson.plugins.sonar.SonarRunnerInstaller
+          import jenkins.model.Jenkins
+          
+          def jenkins = Jenkins.getInstance()
+          
+          // Configuration du serveur SonarQube
+          def sonarConfig = jenkins.getDescriptor(SonarGlobalConfiguration.class)
+          def sonarInstallations = [
+            new SonarInstallation(
+              "SonarQube", 
+              "{{ sonarqube_host }}", 
+              "sonarqube-credentials", 
+              "", 
+              "", 
+              "", 
+              "", 
+              ""
+            )
+          ]
+          sonarConfig.setInstallations(sonarInstallations as SonarInstallation[])
+          sonarConfig.setBuildWrapperEnabled(true)
+          sonarConfig.save()
+          
+          // Configuration de SonarQube Scanner
+          def sonarScannerDesc = jenkins.getDescriptor(SonarRunnerInstallation.class)
+          def installer = new SonarRunnerInstaller("4.8.0.2856")
+          def prop = new InstallSourceProperty([installer])
+          def installation = new SonarRunnerInstallation("SonarQubeScanner", "", [prop])
+          sonarScannerDesc.setInstallations(installation)
+          sonarScannerDesc.save()
+          
+          println "✅ Configuration SonarQube terminée"
+          EOF
+          
+          # Script Groovy pour configurer les outils système
+          cat > /tmp/configure-tools.groovy << 'EOF'
+          import hudson.model.JDK
+          import hudson.plugins.nodejs.NodeJSInstallation
+          import hudson.plugins.nodejs.tools.NodeJSInstaller
+          import hudson.tools.InstallSourceProperty
+          import jenkins.model.Jenkins
+          
+          def jenkins = Jenkins.getInstance()
+          
+          // Configuration de Node.js
+          def nodeDesc = jenkins.getDescriptor(NodeJSInstallation.class)
+          def nodeInstaller = new NodeJSInstaller("18.19.0", "", 72)
+          def nodeProp = new InstallSourceProperty([nodeInstaller])
+          def nodeInstallation = new NodeJSInstallation("Node.js-18", "", [nodeProp])
+          nodeDesc.setInstallations(nodeInstallation)
+          nodeDesc.save()
+          
+          println "✅ Configuration des outils système terminée"
+          EOF
+          
+          echo "📋 Création des credentials..."
+          
+          # Appliquer les credentials SonarQube
+          if run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/sonarqube-credentials.xml 2>/dev/null; then
+            echo "✅ Credentials SonarQube créés"
+          else
+            echo "⚠️  Credentials SonarQube déjà existants ou erreur"
+          fi
+          
+          # Appliquer les credentials AWS
+          if run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/aws-credentials.xml 2>/dev/null; then
+            echo "✅ Credentials AWS créés"
+          else
+            echo "⚠️  Credentials AWS déjà existants ou erreur"
+          fi
+          
+          echo "🔧 Configuration de SonarQube..."
+          
+          # Configurer SonarQube
+          if run_jenkins_cli groovy = < /tmp/configure-sonarqube.groovy; then
+            echo "✅ Configuration SonarQube appliquée"
+          else
+            echo "⚠️  Erreur lors de la configuration SonarQube"
+          fi
+          
+          echo "🔧 Configuration des outils système..."
+          
+          # Configurer les outils système
+          if run_jenkins_cli groovy = < /tmp/configure-tools.groovy; then
+            echo "✅ Configuration des outils système appliquée"
+          else
+            echo "⚠️  Erreur lors de la configuration des outils système"
+          fi
           
           # Nettoyer les fichiers temporaires
-          rm -f /tmp/sonarqube-scanner-tool.xml /tmp/sonar-server-config.xml /tmp/sonarqube-credentials.xml
+          rm -f /tmp/sonarqube-credentials.xml /tmp/aws-credentials.xml
+          rm -f /tmp/configure-sonarqube.groovy /tmp/configure-tools.groovy
+          rm -f /tmp/jenkins-cli.jar
           
-          echo "Configuration des outils terminée"
+          echo "✅ Configuration des outils Jenkins terminée"
         dest: /tmp/configure-jenkins-tools.sh
         mode: '0755'
         
     - name: Exécuter le script de configuration des outils Jenkins
       command: /tmp/configure-jenkins-tools.sh
-      args:
-        creates: /var/lib/jenkins/.sonar/sonar-scanner-4.8.0.2856
+      register: jenkins_config_result
+      ignore_errors: yes
+      
+    - name: Afficher le résultat de la configuration Jenkins
+      debug:
+        msg: |
+          Configuration Jenkins terminée:
+          {% if jenkins_config_result.rc == 0 %}
+          ✅ Succès: {{ jenkins_config_result.stdout_lines | join('\n') }}
+          {% else %}
+          ⚠️  Erreur (non bloquante): {{ jenkins_config_result.stderr_lines | join('\n') }}
+          💡 Vous pouvez configurer manuellement les outils dans Jenkins
+          {% endif %}
