@@ -30,7 +30,7 @@ jenkins-master ansible_host=${JENKINS_IP} ansible_user=ubuntu ansible_ssh_privat
 EOF
 
 # Déployer Jenkins master
-ansible-playbook -i inventory.ini jenkins-master-playbook.yml
+ansible-playbook -i inventory.ini jenkins-master-playbook.yml -v
 
 # Nettoyer
 rm -f inventory.ini "$SSH_KEY_FILE"

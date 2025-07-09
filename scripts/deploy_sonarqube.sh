@@ -23,7 +23,7 @@ sonar-server ansible_host=${SONARQUBE_IP} ansible_user=ubuntu ansible_ssh_privat
 EOF
 
 # Déployer SonarQube
-ansible-playbook -i inventory.ini sonarqube-playbook.yml
+ansible-playbook -i inventory.ini sonarqube-playbook.yml -v
 
 # Nettoyer
 rm -f inventory.ini "$SSH_KEY_FILE"
