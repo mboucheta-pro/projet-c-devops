@@ -30,6 +30,7 @@ jenkins-master ansible_host=${JENKINS_IP} ansible_user=ubuntu ansible_ssh_privat
 EOF
 
 # Déployer Jenkins master
+ansible-galaxy install -r requirements.yml
 ansible-playbook -i inventory.ini jenkins-master-playbook.yml -v
 
 # Nettoyer

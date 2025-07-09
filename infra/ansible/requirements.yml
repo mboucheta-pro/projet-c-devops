@@ -1,0 +1,31 @@
+# Rôles Ansible pour le projet DevOps
+---
+roles:
+  # Rôle pour Java (requis pour Jenkins)
+  - name: geerlingguy.java
+    version: "2.2.0"
+  
+  # Rôle pour Jenkins
+  - name: geerlingguy.jenkins
+    version: "4.5.0"
+  
+  # Rôle pour Docker
+  - name: geerlingguy.docker
+    version: "6.1.0"
+  
+  # Rôle pour Pip (Python package manager)
+  - name: geerlingguy.pip
+    version: "2.2.0"
+
+collections:
+  # Collection community pour des modules supplémentaires
+  - name: community.general
+    version: ">=7.0.0"
+  
+  # Collection pour Docker
+  - name: community.docker
+    version: ">=3.0.0"
+  
+  # Collection pour PostgreSQL (pour SonarQube)
+  - name: community.postgresql
+    version: ">=2.0.0"
