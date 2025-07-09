@@ -88,6 +88,21 @@
       loop: "{{ node_check.results }}"
 
     # Installation de Docker pour Jenkins master
+    - name: Supprimer les anciens dépôts Docker s'ils existent
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/trusted.gpg.d/docker.gpg
+        - /etc/apt/trusted.gpg.d/docker.asc
+
+    - name: Nettoyer les anciennes clés Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: absent
+      ignore_errors: yes
+
     - name: Créer le répertoire pour les clés Docker
       file:
         path: /etc/apt/keyrings
@@ -105,7 +120,8 @@
       apt_repository:
         repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
-        filename: docker
+        filename: docker-ce
+        update_cache: yes
 
     - name: Installer Docker
       apt:
@@ -229,26 +245,44 @@
           alias la='ls -A'
           alias l='ls -CF'
 
-    - name: Installer Trivy pour les scans de sécurité
-      shell: |
-        curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
-        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | tee -a /etc/apt/sources.list.d/trivy.list
-        apt-get update
-        apt-get install -y trivy
-      args:
-        creates: /usr/bin/trivy
-        
+    - name: Installer Trivy pour les scans de sécurité (version moderne)
+      block:
+        - name: Créer le répertoire pour les clés Trivy
+          file:
+            path: /usr/share/keyrings
+            state: directory
+            mode: '0755'
+
+        - name: Télécharger et installer la clé GPG Trivy
+          shell: |
+            curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+            chmod a+r /usr/share/keyrings/trivy.gpg
+          args:
+            creates: /usr/share/keyrings/trivy.gpg
+
+        - name: Ajouter le dépôt Trivy
+          apt_repository:
+            repo: "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb {{ ansible_distribution_release }} main"
+            state: present
+            filename: trivy
+            update_cache: yes
+
+        - name: Installer Trivy
+          apt:
+            name: trivy
+            state: present
+            update_cache: yes
+
     - name: Télécharger le CLI de SonarQube Scanner
       get_url:
         url: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
         dest: /tmp/sonar-scanner-cli.zip
         mode: '0644'
         
-    - name: Créer le répertoire pour SonarQube Scanner
+    - name: Supprimer le répertoire SonarQube Scanner existant s'il existe
       file:
         path: /opt/sonar-scanner
-        state: directory
-        mode: '0755'
+        state: absent
         
     - name: Extraire le SonarQube Scanner
       unarchive:
@@ -262,6 +296,7 @@
         src: /opt/sonar-scanner-4.8.0.2856-linux
         dest: /opt/sonar-scanner
         state: link
+        force: yes
         
     - name: Ajouter SonarQube Scanner au PATH
       copy:
