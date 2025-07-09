@@ -8,7 +8,7 @@ resource "aws_vpc" "infra" {
   enable_dns_hostnames = true
 
   tags = {
-    Name = "vpc-infra"
+    Name = "${var.project_name}-vpc"
   }
 }
 
@@ -21,7 +21,7 @@ resource "aws_subnet" "infra_public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "vpc-infra-public-${count.index + 1}"
+    Name = "${var.project_name}-vpc-public-${count.index + 1}"
   }
 }
 
@@ -30,7 +30,7 @@ resource "aws_internet_gateway" "infra" {
   vpc_id = aws_vpc.infra.id
 
   tags = {
-    Name = "vpc-infra-igw"
+    Name = "${var.project_name}-vpc-igw"
   }
 }
 
@@ -43,7 +43,7 @@ resource "aws_route_table" "infra_public" {
     gateway_id = aws_internet_gateway.infra.id
   }
   tags = {
-    Name = "vpc-infra-public-rt"
+    Name = "${var.project_name}-vpc-public-rt"
   }
 }
 

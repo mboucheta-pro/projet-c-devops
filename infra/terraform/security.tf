@@ -1,6 +1,6 @@
 # Groupe de sécurité pour les instances du VPC Infra
 resource "aws_security_group" "infra_instances" {
-  name        = "${var.project_name}-infra-instances-sg"
+  name        = "${var.project_name}-instances-sg"
   description = "Security group for CI/CD instances in VPC Infra"
   vpc_id      = aws_vpc.infra.id
 
@@ -44,7 +44,7 @@ resource "aws_security_group" "infra_instances" {
   }
 
   tags = {
-    Name = "${var.project_name}-infra-instances-sg"
+    Name = "${var.project_name}-instances-sg"
   }
 
   lifecycle {
