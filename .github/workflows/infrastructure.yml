@@ -11,6 +11,7 @@ on:
         options:
           - create_backend
           - create_infra
+          - configure_components
           - destroy
       confirm:
         description: 'Confirmer la destruction (requis pour destroy)'
@@ -18,10 +19,25 @@ on:
         type: boolean
         default: false
       configure_all:
-        description: 'Configurer tous les composants après création (SonarQube, Jenkins master et agent)'
+        description: 'Configurer tous les composants après création'
         required: false
         type: boolean
-        default: true
+        default: false
+      configure_sonarqube:
+        description: 'Configurer SonarQube'
+        required: false
+        type: boolean
+        default: false
+      configure_jenkins_master:
+        description: 'Configurer Jenkins Master'
+        required: false
+        type: boolean
+        default: false
+      configure_jenkins_agent:
+        description: 'Configurer Jenkins Agent'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   # Job pour créer uniquement le backend (S3 + DynamoDB)
@@ -149,3 +165,79 @@ jobs:
           terraform plan -destroy -out="tfplan-destroy"
           terraform apply -auto-approve tfplan-destroy
           echo "🗑️ Infrastructure détruite avec succès"
+
+  # Job pour configurer individuellement les composants
+  configure_components:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'configure_components'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-terraform
+        with:
+          aws_credentials: ${{ secrets.AWS_CREDENTIALS_BASE64 }}
+          
+      - name: Get Infrastructure IPs
+        id: get_ips
+        run: |
+          cd $GITHUB_WORKSPACE/infra/terraform
+          terraform init
+          
+          # Récupération des IPs depuis les outputs Terraform
+          if terraform output jenkins_ip >/dev/null 2>&1; then
+            echo "JENKINS_IP=$(terraform output jenkins_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV
+          fi
+          
+          if terraform output jenkins_agent_ip >/dev/null 2>&1; then
+            echo "JENKINS_AGENT_IP=$(terraform output jenkins_agent_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV
+          fi
+          
+          if terraform output sonarqube_ip >/dev/null 2>&1; then
+            echo "SONARQUBE_IP=$(terraform output sonarqube_ip | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)" >> $GITHUB_ENV
+          fi
+          
+          echo "✅ Récupération des IPs terminée"
+
+      - name: Configure SonarQube
+        if: github.event.inputs.configure_sonarqube == 'true'
+        run: |
+          echo "🔧 Configuration de SonarQube sur $SONARQUBE_IP"
+          chmod +x scripts/deploy_sonarqube.sh
+          ./scripts/deploy_sonarqube.sh
+          echo "✅ SonarQube configuré avec succès: http://$SONARQUBE_IP:9000"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+
+      - name: Configure Jenkins Master
+        if: github.event.inputs.configure_jenkins_master == 'true'
+        run: |
+          echo "🔧 Configuration de Jenkins Master sur $JENKINS_IP"
+          chmod +x scripts/deploy_jenkins_master.sh
+          ./scripts/deploy_jenkins_master.sh
+          echo "✅ Jenkins Master configuré avec succès: http://$JENKINS_IP:8080"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+
+      - name: Configure Jenkins Agent
+        if: github.event.inputs.configure_jenkins_agent == 'true'
+        run: |
+          echo "🔧 Configuration de Jenkins Agent sur $JENKINS_AGENT_IP"
+          chmod +x scripts/deploy_jenkins_agent.sh
+          ./scripts/deploy_jenkins_agent.sh
+          echo "✅ Jenkins Agent configuré avec succès et connecté au master"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
+          
+      - name: Configuration Summary
+        run: |
+          echo "📋 Résumé de la configuration:"
+          if [ "${{ github.event.inputs.configure_sonarqube }}" == "true" ]; then
+            echo "🔹 SonarQube: http://$SONARQUBE_IP:9000"
+          fi
+          if [ "${{ github.event.inputs.configure_jenkins_master }}" == "true" ]; then
+            echo "🔹 Jenkins Master: http://$JENKINS_IP:8080"
+          fi
+          if [ "${{ github.event.inputs.configure_jenkins_agent }}" == "true" ]; then
+            echo "🔹 Jenkins Agent: Connecté au master"
+          fi
+          echo "✅ Configuration terminée avec succès"
