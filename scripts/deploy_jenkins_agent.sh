@@ -21,7 +21,7 @@ jenkins-agent ansible_host=${JENKINS_AGENT_IP} ansible_user=ubuntu ansible_ssh_p
 EOF
 
 # Déployer avec le playbook simplifié
-ansible-playbook -i inventory.ini jenkins-agent-simple.yml
+ansible-playbook -i inventory.ini jenkins-agent-playbook.yml
 
 # Nettoyer
 rm -f inventory.ini "$SSH_KEY_FILE"
