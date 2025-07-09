@@ -1,6 +1,6 @@
 # IAM Role pour les instances CI/CD (Jenkins, SonarQube)
 resource "aws_iam_role" "cicd_instances" {
-  name = "${var.project}-cicd-instances-role"
+  name = "${var.project_name}-cicd-instances-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -17,7 +17,7 @@ resource "aws_iam_role" "cicd_instances" {
 }
 
 resource "aws_iam_role_policy" "cicd_instances" {
-  name = "${var.project}-cicd-instances-policy"
+  name = "${var.project_name}-cicd-instances-policy"
   role = aws_iam_role.cicd_instances.id
 
   policy = jsonencode({
@@ -243,6 +243,6 @@ resource "aws_iam_role_policy" "cicd_instances" {
 }
 
 resource "aws_iam_instance_profile" "cicd_instances" {
-  name = "${var.project}-cicd-instances-profile"
+  name = "${var.project_name}-cicd-instances-profile"
   role = aws_iam_role.cicd_instances.name
 }

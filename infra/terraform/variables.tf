@@ -1,5 +1,5 @@
 # Configuration générale
-variable "project" {
+variable "project_name" {
   description = "Nom du projet"
   type        = string
   default = "projet-c-devops"

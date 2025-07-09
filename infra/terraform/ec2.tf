@@ -19,7 +19,7 @@ resource "aws_instance" "jenkins" {
   }
 
   tags = {
-    Name = "${var.project}-jenkins"
+    Name = "${var.project_name}-jenkins"
   }
 
   lifecycle {
@@ -43,7 +43,7 @@ resource "aws_instance" "jenkins_agent" {
   }
 
   tags = {
-    Name = "${var.project}-jenkins-agent"
+    Name = "${var.project_name}-jenkins-agent"
   }
 
   lifecycle {
@@ -66,7 +66,7 @@ resource "aws_instance" "sonarqube" {
   }
 
   tags = {
-    Name = "${var.project}-sonarqube"
+    Name = "${var.project_name}-sonarqube"
   }
 
   lifecycle {

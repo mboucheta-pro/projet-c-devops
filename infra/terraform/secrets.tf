@@ -11,7 +11,7 @@ resource "random_password" "sonarqube_admin" {
 
 # Secrets AWS avec mots de passe générés automatiquement
 resource "aws_secretsmanager_secret" "jenkins_credentials" {
-  name                    = "${var.project}-jenkins-credentials"
+  name                    = "${var.project_name}-jenkins-credentials"
   description             = "Credentials pour Jenkins"
   recovery_window_in_days = 0
 }
@@ -25,7 +25,7 @@ resource "aws_secretsmanager_secret_version" "jenkins_credentials" {
 }
 
 resource "aws_secretsmanager_secret" "sonarqube_credentials" {
-  name                    = "${var.project}-sonarqube-credentials"
+  name                    = "${var.project_name}-sonarqube-credentials"
   description             = "Credentials pour SonarQube"
   recovery_window_in_days = 0
 }
