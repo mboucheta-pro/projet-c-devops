@@ -12,6 +12,7 @@
     aws_credentials_base64: "{{ lookup('env', 'AWS_CREDENTIALS_BASE64') | default('') }}"
     jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
     jenkins_http_port: 8080
+    node_version: "18.19.0"
   vars_files:
     - vars/jenkins.yml
   pre_tasks:
@@ -32,8 +33,79 @@
           - unzip
           - python3-pip
           - curl
+          - wget
+          - build-essential
+          - git
+          - ca-certificates
+          - gnupg
+          - lsb-release
         state: present
-        
+
+    # Installation de Node.js via NodeSource
+    - name: Ajouter la clé GPG NodeSource
+      apt_key:
+        url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+        state: present
+
+    - name: Ajouter le dépôt NodeSource pour Node.js 18.x
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_18.x {{ ansible_distribution_release }} main"
+        state: present
+        update_cache: yes
+
+    - name: Installer Node.js
+      apt:
+        name: nodejs
+        state: present
+        update_cache: yes
+
+    - name: Vérifier l'installation de Node.js et npm
+      command: "{{ item }}"
+      loop:
+        - node --version
+        - npm --version
+      register: node_check
+      changed_when: false
+
+    - name: Afficher les versions installées
+      debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ node_check.results }}"
+
+    # Installation de Docker pour Jenkins master
+    - name: Ajouter la clé GPG Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Ajouter le dépôt Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Installer Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Démarrer et activer Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ajouter l'utilisateur jenkins au groupe docker
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
     - name: Téléchargement d'AWS CLI v2
       get_url:
         url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
@@ -93,7 +165,46 @@
       until: jenkins_api_status.status == 200
       retries: 30
       delay: 10
-      
+
+    # Redémarrer Jenkins pour prendre en compte les nouveaux groupes
+    - name: Redémarrer Jenkins pour prendre en compte le groupe docker
+      systemd:
+        name: jenkins
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre que Jenkins soit de nouveau disponible après redémarrage
+      uri:
+        url: http://localhost:{{ jenkins_http_port }}/api/json
+        method: GET
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+        force_basic_auth: yes
+        status_code: 200
+        timeout: 5
+      register: jenkins_restart_status
+      until: jenkins_restart_status.status == 200
+      retries: 30
+      delay: 10
+
+    # Configuration de l'environnement pour l'utilisateur jenkins
+    - name: Créer le fichier .bashrc pour l'utilisateur jenkins
+      copy:
+        dest: /var/lib/jenkins/.bashrc
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+        content: |
+          # Fichier .bashrc pour Jenkins
+          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
+          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          
+          # Aliases utiles
+          alias ll='ls -alF'
+          alias la='ls -A'
+          alias l='ls -CF'
+
     - name: Installer Trivy pour les scans de sécurité
       shell: |
         curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -

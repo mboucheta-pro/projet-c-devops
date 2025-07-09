@@ -25,12 +25,18 @@
         name: 
           - docker.io
           - docker-compose
+          - docker-buildx
           - python3-pip
           - python3-setuptools
           - python3-venv
           - pipx
           - jq
           - curl
+          - wget
+          - git
+          - ca-certificates
+          - gnupg
+          - lsb-release
         state: present
         update_cache: yes
 
@@ -76,3 +82,19 @@
           - "http://{{ inventory_hostname }}:9000"
           - "Identifiants par défaut: admin/admin"
           - "IMPORTANT: Veuillez configurer manuellement l'intégration avec Jenkins en suivant les instructions dans la documentation."
+
+    - name: Créer un script de vérification des services
+      copy:
+        dest: /home/ubuntu/check-services.sh
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo "=== Status des services ==="
+          echo "Docker: $(systemctl is-active docker)"
+          echo "SonarQube containers:"
+          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo ""
+          echo "=== Vérification SonarQube ==="
+          curl -s http://localhost:9000/api/system/status | jq .

@@ -12,6 +12,7 @@
     docker_compose_version: "2.24.6"
     sonar_scanner_version: "5.0.1.3006"
     trivy_version: "0.46.1"
+    node_version: "18.19.0"
   tasks:
     - name: Mettre à jour le cache APT
       apt:
@@ -49,6 +50,37 @@
       apt:
         name: "{{ java_packages }}"
         state: present
+
+    # Installation de Node.js via NodeSource
+    - name: Ajouter la clé GPG NodeSource
+      apt_key:
+        url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+        state: present
+
+    - name: Ajouter le dépôt NodeSource pour Node.js 18.x
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_18.x {{ ansible_distribution_release }} main"
+        state: present
+        update_cache: yes
+
+    - name: Installer Node.js
+      apt:
+        name: nodejs
+        state: present
+        update_cache: yes
+
+    - name: Vérifier l'installation de Node.js et npm
+      command: "{{ item }}"
+      loop:
+        - node --version
+        - npm --version
+      register: node_check
+      changed_when: false
+
+    - name: Afficher les versions Node.js installées
+      debug:
+        msg: "{{ item.cmd[0] }}: {{ item.stdout }}"
+      loop: "{{ node_check.results }}"
 
     - name: Créer l'utilisateur jenkins
       user:
@@ -165,6 +197,8 @@
           - docker-ce
           - docker-ce-cli
           - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
         state: present
         update_cache: yes
         
@@ -173,6 +207,12 @@
         name: "{{ jenkins_agent_user }}"
         groups: docker
         append: yes
+
+    - name: Démarrer et activer Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
         
     # Installation de Docker Compose
     - name: Télécharger Docker Compose
@@ -296,3 +336,47 @@
           export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
           export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
           export SONAR_SCANNER_HOME=/opt/sonar-scanner
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          
+          # Aliases utiles
+          alias ll='ls -alF'
+          alias la='ls -A'
+          alias l='ls -CF'
+          alias docker-clean='docker system prune -f'
+          alias k='kubectl'
+
+    - name: Créer le fichier profile pour définir les variables globalement
+      copy:
+        dest: /etc/profile.d/jenkins-env.sh
+        mode: '0644'
+        content: |
+          # Variables d'environnement pour Jenkins
+          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
+          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
+          export SONAR_SCANNER_HOME=/opt/sonar-scanner
+          export NODE_OPTIONS="--max-old-space-size=4096"
+
+    # Test des installations
+    - name: Tester les installations critiques
+      command: "{{ item }}"
+      loop:
+        - node --version
+        - npm --version
+        - docker --version
+        - java -version
+        - terraform version
+        - kubectl version --client
+        - aws --version
+      register: tools_check
+      changed_when: false
+      failed_when: false
+
+    - name: Afficher les résultats des tests d'installation
+      debug:
+        msg: "{{ item.cmd[0] }}: {{ 'OK' if item.rc == 0 else 'FAILED' }} - {{ item.stdout if item.rc == 0 else item.stderr }}"
+      loop: "{{ tools_check.results }}"
+
+    - name: Vérifier que tous les outils critiques sont installés
+      fail:
+        msg: "Des outils critiques ne sont pas installés correctement"
+      when: tools_check.results | selectattr('rc', 'ne', 0) | list | length > 0
