@@ -14,9 +14,85 @@
     trivy_version: "0.46.1"
     node_version: "18.19.0"
   tasks:
-    - name: Mettre à jour le cache APT
+    # === NETTOYAGE PRÉVENTIF DES CONFLITS APT ===
+    - name: Arrêter les services APT en cours
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - unattended-upgrades
+        - apt-daily
+        - apt-daily-upgrade
+      ignore_errors: yes
+
+    - name: Attendre la libération des verrous APT
+      shell: |
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+          echo "Attente verrou APT..."
+          sleep 2
+        done
+      changed_when: false
+
+    - name: Supprimer tous les verrous APT
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+      ignore_errors: yes
+
+    - name: Nettoyage complet des dépôts Docker conflictuels
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/sources.list.d/docker-ce.list
+        - /etc/apt/sources.list.d/docker.sources
+        - /etc/apt/sources.list.d/docker-official.list
+        - /etc/apt/trusted.gpg.d/docker.gpg
+        - /etc/apt/trusted.gpg.d/docker.asc
+        - /etc/apt/keyrings/docker.gpg
+      ignore_errors: yes
+
+    - name: Nettoyer les références Docker du sources.list principal
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*docker.*'
+        state: absent
+      ignore_errors: yes
+
+    - name: Nettoyer complètement le cache APT
+      shell: |
+        apt-get clean
+        rm -rf /var/lib/apt/lists/*
+        rm -rf /var/cache/apt/archives/partial/*
+      ignore_errors: yes
+
+    - name: Reconfigurer dpkg
+      shell: dpkg --configure -a
+      ignore_errors: yes
+
+    - name: Mettre à jour le cache APT (première tentative)
       apt:
         update_cache: yes
+        force_apt_get: yes
+      register: apt_update_result
+      ignore_errors: yes
+
+    - name: Nettoyer les fichiers sources vides en cas d'échec
+      shell: find /etc/apt/sources.list.d/ -type f -size 0 -delete
+      when: apt_update_result.failed
+      ignore_errors: yes
+
+    - name: Mettre à jour le cache APT (deuxième tentative)
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+      when: apt_update_result.failed
 
     - name: Installer les dépendances de base
       apt:

@@ -94,7 +94,21 @@
           echo "=== Status des services ==="
           echo "Docker: $(systemctl is-active docker)"
           echo "SonarQube containers:"
-          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          docker ps --filter "name=sonar" --format "table {% raw %}{{.Names}}\t{{.Status}}\t{{.Ports}}{% endraw %}"
           echo ""
           echo "=== Vérification SonarQube ==="
-          curl -s http://localhost:9000/api/system/status | jq .
+          curl -s http://localhost:9000/api/system/status
+          echo ""
+          echo "=== Logs récents SonarQube ==="
+          docker logs --tail 20 sonarqube 2>/dev/null || echo "Container SonarQube non trouvé"
+          echo ""
+          echo "=== Test de connectivité ==="
+          if curl -s -o /dev/null -w "%{http_code}" http://localhost:9000 | grep -q "200"; then
+            echo "✅ SonarQube est accessible"
+          else
+            echo "❌ SonarQube n'est pas accessible"
+          fi
+          echo ""
+          echo "=== Informations système ==="
+          echo "Espace disque: $(df -h / | tail -1 | awk '{print $5}')"
+          echo "Mémoire disponible: $(free -h | grep Mem | awk '{print $7}')"
