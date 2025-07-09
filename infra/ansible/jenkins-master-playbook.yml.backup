@@ -1,0 +1,506 @@
+---
+- name: Configuration de Jenkins
+  hosts: jenkins
+  become: true
+  vars:
+    java_packages:
+      - openjdk-17-jdk
+    jenkins_admin_username: "{{ lookup('env', 'JENKINS_ADMIN_USERNAME') }}"
+    jenkins_admin_password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
+    git_repo_url: "{{ lookup('env', 'GIT_REPO_URL') | default('https://github.com/votre-utilisateur/projet-c-app.git') }}"
+    git_credentials_id: "{{ lookup('env', 'GIT_CREDENTIALS_ID') | default('') }}"
+    aws_credentials_base64: "{{ lookup('env', 'AWS_CREDENTIALS_BASE64') | default('') }}"
+    jenkins_java_options: "-Djenkins.install.runSetupWizard=false"
+    jenkins_http_port: 8080
+    node_version: "18.19.0"
+  vars_files:
+    - vars/jenkins.yml
+  pre_tasks:
+    - name: Enable 'universe' repository on Ubuntu
+      apt_repository:
+        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
+        state: present
+      when: ansible_distribution == 'Ubuntu'
+    
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Installation des outils nécessaires pour Terraform et AWS
+      apt:
+        name:
+          - jq
+          - unzip
+          - python3-pip
+          - curl
+          - wget
+          - build-essential
+          - git
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - xz-utils
+        state: present
+
+    # Installation moderne de Node.js via les binaires officiels
+    - name: Créer le répertoire pour Node.js
+      file:
+        path: /opt/nodejs
+        state: directory
+        mode: '0755'
+
+    - name: Télécharger Node.js {{ node_version }}
+      get_url:
+        url: "https://nodejs.org/dist/v{{ node_version }}/node-v{{ node_version }}-linux-x64.tar.xz"
+        dest: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
+        mode: '0644'
+
+    - name: Extraire Node.js
+      unarchive:
+        src: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
+        dest: /opt/nodejs
+        remote_src: yes
+        creates: "/opt/nodejs/node-v{{ node_version }}-linux-x64"
+        extra_opts: [--strip-components=1]
+
+    - name: Créer des liens symboliques pour Node.js et npm
+      file:
+        src: "/opt/nodejs/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+        force: yes
+      loop:
+        - node
+        - npm
+        - npx
+
+    - name: Vérifier l'installation de Node.js et npm
+      command: "{{ item }}"
+      loop:
+        - node --version
+        - npm --version
+      register: node_check
+      changed_when: false
+
+    - name: Afficher les versions installées
+      debug:
+        msg: "{{ item.cmd[0] }}: {{ item.stdout }}"
+      loop: "{{ node_check.results }}"
+
+    # Installation de Docker pour Jenkins master
+    - name: Supprimer TOUS les anciens dépôts et clés Docker
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/sources.list.d/docker-ce.list
+        - /etc/apt/sources.list.d/docker.sources
+        - /etc/apt/trusted.gpg.d/docker.gpg
+        - /etc/apt/trusted.gpg.d/docker.asc
+        - /etc/apt/keyrings/docker.gpg
+
+    - name: Supprimer toutes les références Docker du sources.list principal
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*docker.*'
+        state: absent
+      ignore_errors: yes
+
+    - name: Nettoyer les anciennes clés Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: absent
+      ignore_errors: yes
+
+    - name: Nettoyer le cache APT après suppression des dépôts
+      apt:
+        update_cache: yes
+      ignore_errors: yes
+
+    - name: Créer le répertoire pour les clés Docker
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Télécharger et installer la clé GPG Docker (propre)
+      shell: |
+        rm -f /etc/apt/keyrings/docker.gpg
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+
+    - name: Ajouter le dépôt Docker (fichier propre)
+      copy:
+        dest: /etc/apt/sources.list.d/docker-ce.list
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        mode: '0644'
+        backup: yes
+
+    - name: Mettre à jour le cache APT après ajout du dépôt Docker
+      apt:
+        update_cache: yes
+
+    - name: Installer Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Démarrer et activer Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ajouter l'utilisateur jenkins au groupe docker
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
+    - name: Téléchargement d'AWS CLI v2
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+        
+    - name: Extraction d'AWS CLI v2
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+        creates: /tmp/aws
+        
+    - name: Installation d'AWS CLI v2
+      command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+        
+    - name: Téléchargement de Terraform
+      get_url:
+        url: https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        dest: /tmp/terraform.zip
+        mode: '0644'
+      
+    - name: Installation de Terraform
+      unarchive:
+        src: /tmp/terraform.zip
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+        creates: /usr/local/bin/terraform
+
+    - name: Activer NTP avec timedatectl
+      become: yes
+      ansible.builtin.command: timedatectl set-ntp true
+      changed_when: false
+
+    - name: Configurer la timezone sur Europe/Paris
+      timezone:
+        name: Europe/Paris
+
+  roles:
+    - role: geerlingguy.java
+    - role: geerlingguy.jenkins
+
+  post_tasks:
+    - name: Attendre que Jenkins soit disponible
+      uri:
+        url: http://localhost:{{ jenkins_http_port }}/api/json
+        method: GET
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+        force_basic_auth: yes
+        status_code: 200
+        timeout: 5
+      register: jenkins_api_status
+      until: jenkins_api_status.status == 200
+      retries: 30
+      delay: 10
+
+    # Redémarrer Jenkins pour prendre en compte les nouveaux groupes
+    - name: Redémarrer Jenkins pour prendre en compte le groupe docker
+      systemd:
+        name: jenkins
+        state: restarted
+        daemon_reload: yes
+
+    - name: Attendre que Jenkins soit de nouveau disponible après redémarrage
+      uri:
+        url: http://localhost:{{ jenkins_http_port }}/api/json
+        method: GET
+        user: "{{ jenkins_admin_username }}"
+        password: "{{ jenkins_admin_password }}"
+        force_basic_auth: yes
+        status_code: 200
+        timeout: 5
+      register: jenkins_restart_status
+      until: jenkins_restart_status.status == 200
+      retries: 30
+      delay: 10
+
+    # Configuration de l'environnement pour l'utilisateur jenkins
+    - name: Créer le fichier .bashrc pour l'utilisateur jenkins
+      copy:
+        dest: /var/lib/jenkins/.bashrc
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+        content: |
+          # Fichier .bashrc pour Jenkins
+          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
+          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          
+          # Aliases utiles
+          alias ll='ls -alF'
+          alias la='ls -A'
+          alias l='ls -CF'
+
+    - name: Installer Trivy pour les scans de sécurité (version moderne)
+      block:
+        - name: Créer le répertoire pour les clés Trivy
+          file:
+            path: /usr/share/keyrings
+            state: directory
+            mode: '0755'
+
+        - name: Télécharger et installer la clé GPG Trivy
+          shell: |
+            curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+            chmod a+r /usr/share/keyrings/trivy.gpg
+          args:
+            creates: /usr/share/keyrings/trivy.gpg
+
+        - name: Ajouter le dépôt Trivy
+          apt_repository:
+            repo: "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb {{ ansible_distribution_release }} main"
+            state: present
+            filename: trivy
+            update_cache: yes
+
+        - name: Installer Trivy
+          apt:
+            name: trivy
+            state: present
+            update_cache: yes
+
+    - name: Télécharger le CLI de SonarQube Scanner
+      get_url:
+        url: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
+        dest: /tmp/sonar-scanner-cli.zip
+        mode: '0644'
+        
+    - name: Supprimer le répertoire SonarQube Scanner existant s'il existe
+      file:
+        path: /opt/sonar-scanner
+        state: absent
+        
+    - name: Extraire le SonarQube Scanner
+      unarchive:
+        src: /tmp/sonar-scanner-cli.zip
+        dest: /opt
+        remote_src: yes
+        creates: /opt/sonar-scanner-4.8.0.2856-linux
+        
+    - name: Créer un lien symbolique pour SonarQube Scanner
+      file:
+        src: /opt/sonar-scanner-4.8.0.2856-linux
+        dest: /opt/sonar-scanner
+        state: link
+        force: yes
+        
+    - name: Ajouter SonarQube Scanner au PATH
+      copy:
+        content: 'export PATH=$PATH:/opt/sonar-scanner/bin'
+        dest: /etc/profile.d/sonarqube.sh
+        mode: '0644'
+        
+    - name: Récupérer les secrets SonarQube depuis AWS Secrets Manager
+      shell: >
+        aws secretsmanager get-secret-value 
+        --secret-id 'projet-c-devops-sonarqube-credentials' 
+        --region ca-central-1 
+        --query SecretString 
+        --output text
+      register: sonarqube_credentials
+      become: false
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | default('') }}"
+        AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | default('') }}"
+        
+    - name: Définir les variables SonarQube
+      set_fact:
+        sonarqube_host: "http://{{ lookup('env', 'SONARQUBE_IP') | default('localhost') }}:9000"
+        sonarqube_admin_username: "{{ (sonarqube_credentials.stdout | from_json).admin_username | default('admin') }}"
+        sonarqube_admin_password: "{{ (sonarqube_credentials.stdout | from_json).admin_password | default('admin') }}"
+      when: sonarqube_credentials.stdout is defined
+        
+    - name: Créer le script de configuration des outils Jenkins
+      copy:
+        content: |
+          #!/bin/bash
+          
+          # Configuration des outils dans Jenkins via Jenkins CLI
+          jenkins_url="http://localhost:{{ jenkins_http_port }}"
+          admin_user="{{ jenkins_admin_username }}"
+          admin_pass="{{ jenkins_admin_password }}"
+          
+          echo "🔧 Configuration des outils Jenkins..."
+          
+          # Télécharger Jenkins CLI
+          wget -q ${jenkins_url}/jnlpJars/jenkins-cli.jar -O /tmp/jenkins-cli.jar
+          
+          # Fonction pour exécuter des commandes Jenkins CLI
+          run_jenkins_cli() {
+            java -jar /tmp/jenkins-cli.jar -s ${jenkins_url} -auth ${admin_user}:${admin_pass} "$@"
+          }
+          
+          # Créer les credentials SonarQube en XML
+          cat > /tmp/sonarqube-credentials.xml << 'EOF'
+          <com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+            <scope>GLOBAL</scope>
+            <id>sonarqube-credentials</id>
+            <description>SonarQube credentials</description>
+            <username>{{ sonarqube_admin_username }}</username>
+            <password>{{ sonarqube_admin_password }}</password>
+          </com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>
+          EOF
+          
+          # Créer les credentials AWS en XML
+          cat > /tmp/aws-credentials.xml << 'EOF'
+          <com.cloudbees.jenkins.plugins.awscredentials.AWSCredentialsImpl>
+            <scope>GLOBAL</scope>
+            <id>AWS_CREDENTIALS</id>
+            <description>AWS credentials for ECR and deployments</description>
+            <accessKey>${AWS_ACCESS_KEY_ID}</accessKey>
+            <secretKey>${AWS_SECRET_ACCESS_KEY}</secretKey>
+          </com.cloudbees.jenkins.plugins.awscredentials.AWSCredentialsImpl>
+          EOF
+          
+          # Script Groovy pour configurer SonarQube
+          cat > /tmp/configure-sonarqube.groovy << 'EOF'
+          import hudson.plugins.sonar.SonarGlobalConfiguration
+          import hudson.plugins.sonar.SonarInstallation
+          import hudson.plugins.sonar.SonarRunnerInstallation
+          import hudson.tools.InstallSourceProperty
+          import hudson.plugins.sonar.SonarRunnerInstaller
+          import jenkins.model.Jenkins
+          
+          def jenkins = Jenkins.getInstance()
+          
+          // Configuration du serveur SonarQube
+          def sonarConfig = jenkins.getDescriptor(SonarGlobalConfiguration.class)
+          def sonarInstallations = [
+            new SonarInstallation(
+              "SonarQube", 
+              "{{ sonarqube_host }}", 
+              "sonarqube-credentials", 
+              "", 
+              "", 
+              "", 
+              "", 
+              ""
+            )
+          ]
+          sonarConfig.setInstallations(sonarInstallations as SonarInstallation[])
+          sonarConfig.setBuildWrapperEnabled(true)
+          sonarConfig.save()
+          
+          // Configuration de SonarQube Scanner
+          def sonarScannerDesc = jenkins.getDescriptor(SonarRunnerInstallation.class)
+          def installer = new SonarRunnerInstaller("4.8.0.2856")
+          def prop = new InstallSourceProperty([installer])
+          def installation = new SonarRunnerInstallation("SonarQubeScanner", "", [prop])
+          sonarScannerDesc.setInstallations(installation)
+          sonarScannerDesc.save()
+          
+          println "✅ Configuration SonarQube terminée"
+          EOF
+          
+          # Script Groovy pour configurer les outils système
+          cat > /tmp/configure-tools.groovy << 'EOF'
+          import hudson.model.JDK
+          import hudson.plugins.nodejs.NodeJSInstallation
+          import hudson.plugins.nodejs.tools.NodeJSInstaller
+          import hudson.tools.InstallSourceProperty
+          import jenkins.model.Jenkins
+          
+          def jenkins = Jenkins.getInstance()
+          
+          // Configuration de Node.js
+          def nodeDesc = jenkins.getDescriptor(NodeJSInstallation.class)
+          def nodeInstaller = new NodeJSInstaller("18.19.0", "", 72)
+          def nodeProp = new InstallSourceProperty([nodeInstaller])
+          def nodeInstallation = new NodeJSInstallation("Node.js-18", "", [nodeProp])
+          nodeDesc.setInstallations(nodeInstallation)
+          nodeDesc.save()
+          
+          println "✅ Configuration des outils système terminée"
+          EOF
+          
+          echo "📋 Création des credentials..."
+          
+          # Appliquer les credentials SonarQube
+          if run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/sonarqube-credentials.xml 2>/dev/null; then
+            echo "✅ Credentials SonarQube créés"
+          else
+            echo "⚠️  Credentials SonarQube déjà existants ou erreur"
+          fi
+          
+          # Appliquer les credentials AWS
+          if run_jenkins_cli create-credentials-by-xml system::system::jenkins _ < /tmp/aws-credentials.xml 2>/dev/null; then
+            echo "✅ Credentials AWS créés"
+          else
+            echo "⚠️  Credentials AWS déjà existants ou erreur"
+          fi
+          
+          echo "🔧 Configuration de SonarQube..."
+          
+          # Configurer SonarQube
+          if run_jenkins_cli groovy = < /tmp/configure-sonarqube.groovy; then
+            echo "✅ Configuration SonarQube appliquée"
+          else
+            echo "⚠️  Erreur lors de la configuration SonarQube"
+          fi
+          
+          echo "🔧 Configuration des outils système..."
+          
+          # Configurer les outils système
+          if run_jenkins_cli groovy = < /tmp/configure-tools.groovy; then
+            echo "✅ Configuration des outils système appliquée"
+          else
+            echo "⚠️  Erreur lors de la configuration des outils système"
+          fi
+          
+          # Nettoyer les fichiers temporaires
+          rm -f /tmp/sonarqube-credentials.xml /tmp/aws-credentials.xml
+          rm -f /tmp/configure-sonarqube.groovy /tmp/configure-tools.groovy
+          rm -f /tmp/jenkins-cli.jar
+          
+          echo "✅ Configuration des outils Jenkins terminée"
+        dest: /tmp/configure-jenkins-tools.sh
+        mode: '0755'
+        
+    - name: Exécuter le script de configuration des outils Jenkins
+      command: /tmp/configure-jenkins-tools.sh
+      register: jenkins_config_result
+      ignore_errors: yes
+      
+    - name: Afficher le résultat de la configuration Jenkins
+      debug:
+        msg: |
+          Configuration Jenkins terminée:
+          {% if jenkins_config_result.rc == 0 %}
+          ✅ Succès: {{ jenkins_config_result.stdout_lines | join('\n') }}
+          {% else %}
+          ⚠️  Erreur (non bloquante): {{ jenkins_config_result.stderr_lines | join('\n') }}
+          💡 Vous pouvez configurer manuellement les outils dans Jenkins
+          {% endif %}

@@ -1,341 +1,117 @@
 ---
-- name: Configuration de l'agent Jenkins
+- name: Configuration Jenkins Agent
   hosts: jenkins_agents
   become: true
   vars:
-    java_packages:
-      - openjdk-17-jdk
     jenkins_agent_user: jenkins
     jenkins_agent_home: /home/jenkins
-    terraform_version: "1.5.7"
-    kubectl_version: "1.28.6"
-    docker_compose_version: "2.24.6"
-    sonar_scanner_version: "5.0.1.3006"
-    trivy_version: "0.46.1"
-    node_version: "18.19.0"
+  
   tasks:
-    # === NETTOYAGE PRÉVENTIF DES CONFLITS APT ===
-    - name: Arrêter les services APT en cours
-      systemd:
-        name: "{{ item }}"
-        state: stopped
-      loop:
-        - unattended-upgrades
-        - apt-daily
-        - apt-daily-upgrade
-      ignore_errors: yes
+    # Fix Docker APT (cohérent avec master)
+    - name: Fix Docker APT
+      script: ../../scripts/fix_docker_apt.sh
 
-    - name: Attendre la libération des verrous APT
-      shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-          echo "Attente verrou APT..."
-          sleep 2
-        done
-      changed_when: false
-
-    - name: Supprimer tous les verrous APT
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /var/lib/dpkg/lock-frontend
-        - /var/lib/dpkg/lock
-        - /var/lib/apt/lists/lock
-        - /var/cache/apt/archives/lock
-      ignore_errors: yes
-
-    - name: Nettoyage complet des dépôts Docker conflictuels
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/apt/sources.list.d/docker.list
-        - /etc/apt/sources.list.d/docker-ce.list
-        - /etc/apt/sources.list.d/docker.sources
-        - /etc/apt/sources.list.d/docker-official.list
-        - /etc/apt/trusted.gpg.d/docker.gpg
-        - /etc/apt/trusted.gpg.d/docker.asc
-        - /etc/apt/keyrings/docker.gpg
-      ignore_errors: yes
-
-    - name: Nettoyer les références Docker du sources.list principal
-      lineinfile:
-        path: /etc/apt/sources.list
-        regexp: '.*docker.*'
-        state: absent
-      ignore_errors: yes
-
-    - name: Nettoyer complètement le cache APT
-      shell: |
-        apt-get clean
-        rm -rf /var/lib/apt/lists/*
-        rm -rf /var/cache/apt/archives/partial/*
-      ignore_errors: yes
-
-    - name: Reconfigurer dpkg
-      shell: dpkg --configure -a
-      ignore_errors: yes
-
-    - name: Mettre à jour le cache APT (première tentative)
-      apt:
-        update_cache: yes
-        force_apt_get: yes
-      register: apt_update_result
-      ignore_errors: yes
-
-    - name: Nettoyer les fichiers sources vides en cas d'échec
-      shell: find /etc/apt/sources.list.d/ -type f -size 0 -delete
-      when: apt_update_result.failed
-      ignore_errors: yes
-
-    - name: Mettre à jour le cache APT (deuxième tentative)
-      apt:
-        update_cache: yes
-        force_apt_get: yes
-      when: apt_update_result.failed
-
-    - name: Installer les dépendances de base
+    # Installation base
+    - name: Install base packages
       apt:
         name:
-          - apt-transport-https
-          - ca-certificates
+          - openjdk-17-jdk
           - curl
-          - gnupg
-          - lsb-release
-          - software-properties-common
-          - unzip
-          - jq
-          - git
           - wget
-          - python3-pip
-          - build-essential
-          - libssl-dev
-          - maven
-          - xz-utils
-        state: present
+          - git
+          - unzip
+        update_cache: yes
 
-    - name: Activer NTP avec timedatectl
-      become: yes
-      ansible.builtin.command: timedatectl set-ntp true
-      changed_when: false
-
-    - name: Configurer la timezone sur Europe/Paris
+    - name: Set timezone
       timezone:
         name: Europe/Paris
-        
-    - name: Installer Java
-      apt:
-        name: "{{ java_packages }}"
-        state: present
 
-    # Installation moderne de Node.js via les binaires officiels
-    - name: Créer le répertoire pour Node.js
-      file:
-        path: /opt/nodejs
-        state: directory
-        mode: '0755'
+    # Node.js (même méthode que master)
+    - name: Setup Node.js
+      block:
+        - name: Create Node.js directory
+          file:
+            path: /opt/nodejs
+            state: directory
 
-    - name: Télécharger Node.js {{ node_version }}
-      get_url:
-        url: "https://nodejs.org/dist/v{{ node_version }}/node-v{{ node_version }}-linux-x64.tar.xz"
-        dest: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
-        mode: '0644'
+        - name: Download and extract Node.js
+          unarchive:
+            src: https://nodejs.org/dist/v18.19.0/node-v18.19.0-linux-x64.tar.xz
+            dest: /opt/nodejs
+            remote_src: yes
+            extra_opts: [--strip-components=1]
+            creates: /opt/nodejs/bin/node
 
-    - name: Extraire Node.js
-      unarchive:
-        src: "/tmp/node-v{{ node_version }}-linux-x64.tar.xz"
-        dest: /opt/nodejs
-        remote_src: yes
-        creates: "/opt/nodejs/bin/node"
-        extra_opts: [--strip-components=1]
+        - name: Create Node.js symlinks
+          file:
+            src: "/opt/nodejs/bin/{{ item }}"
+            dest: "/usr/local/bin/{{ item }}"
+            state: link
+          loop: [node, npm, npx]
 
-    - name: Créer des liens symboliques pour Node.js et npm
-      file:
-        src: "/opt/nodejs/bin/{{ item }}"
-        dest: "/usr/local/bin/{{ item }}"
-        state: link
-        force: yes
-      loop:
-        - node
-        - npm
-        - npx
+    # Jenkins user et agent
+    - name: Setup Jenkins agent
+      block:
+        - name: Create jenkins user
+          user:
+            name: "{{ jenkins_agent_user }}"
+            home: "{{ jenkins_agent_home }}"
+            shell: /bin/bash
 
-    - name: Vérifier l'installation de Node.js et npm
-      command: "{{ item }}"
-      loop:
-        - node --version
-        - npm --version
-      register: node_check
-      changed_when: false
+        - name: Create agent directory
+          file:
+            path: "{{ jenkins_agent_home }}/agent"
+            state: directory
+            owner: "{{ jenkins_agent_user }}"
+            group: "{{ jenkins_agent_user }}"
 
-    - name: Afficher les versions Node.js installées
-      debug:
-        msg: "{{ item.cmd[0] }}: {{ item.stdout }}"
-      loop: "{{ node_check.results }}"
+        - name: Get agent secret
+          uri:
+            url: "http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/computer/{{ inventory_hostname }}/slave-agent.jnlp"
+            return_content: yes
+          register: agent_jnlp
 
-    - name: Créer l'utilisateur jenkins
-      user:
-        name: "{{ jenkins_agent_user }}"
-        home: "{{ jenkins_agent_home }}"
-        shell: /bin/bash
-        create_home: yes
+        - name: Extract secret
+          set_fact:
+            jenkins_agent_secret: "{{ agent_jnlp.content | regex_search('<argument>([a-f0-9]+)</argument>') | regex_replace('</?argument>', '') }}"
 
-    - name: Créer le répertoire de travail de l'agent
-      file:
-        path: "{{ jenkins_agent_home }}/agent"
-        state: directory
-        owner: "{{ jenkins_agent_user }}"
-        group: "{{ jenkins_agent_user }}"
-        mode: '0755'
+        - name: Download agent.jar
+          get_url:
+            url: "http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/jnlpJars/agent.jar"
+            dest: "{{ jenkins_agent_home }}/agent/agent.jar"
+            owner: "{{ jenkins_agent_user }}"
+            group: "{{ jenkins_agent_user }}"
 
-    - name: Récupérer le secret de l'agent
-      uri:
-        url: "{{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp"
-        method: GET
-        user: admin
-        password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
-        force_basic_auth: yes
-        return_content: yes
-      register: jnlp_content
-      retries: 5
-      delay: 10
+        - name: Create start script
+          copy:
+            content: |
+              #!/bin/bash
+              cd {{ jenkins_agent_home }}/agent
+              java -jar agent.jar -jnlpUrl http://{{ hostvars[inventory_hostname].jenkins_master_ip }}:8080/computer/{{ inventory_hostname }}/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}
+            dest: "{{ jenkins_agent_home }}/start-agent.sh"
+            owner: "{{ jenkins_agent_user }}"
+            group: "{{ jenkins_agent_user }}"
+            mode: '0755'
 
-    - name: Extraire le secret
-      set_fact:
-        jenkins_agent_secret: "{{ jnlp_content.content | regex_search('<argument>([a-f0-9]+)</argument>', '\\1') | first }}"
+        - name: Create systemd service
+          copy:
+            content: |
+              [Unit]
+              Description=Jenkins Agent
+              After=network.target
 
-    - name: Télécharger l'agent Jenkins
-      get_url:
-        url: "{{ jenkins_master_url }}/jnlpJars/agent.jar"
-        dest: "{{ jenkins_agent_home }}/agent/agent.jar"
-        owner: "{{ jenkins_agent_user }}"
-        group: "{{ jenkins_agent_user }}"
-        mode: '0644'
+              [Service]
+              Type=simple
+              User={{ jenkins_agent_user }}
+              ExecStart={{ jenkins_agent_home }}/start-agent.sh
+              Restart=always
 
-    - name: Créer le script de démarrage de l'agent
-      copy:
-        content: |
-          #!/bin/bash
-          cd {{ jenkins_agent_home }}/agent
-          java -jar agent.jar -jnlpUrl {{ jenkins_master_url }}/computer/jenkins-agent/slave-agent.jnlp -secret {{ jenkins_agent_secret }} -workDir {{ jenkins_agent_home }}/agent
-        dest: "{{ jenkins_agent_home }}/start-agent.sh"
-        owner: "{{ jenkins_agent_user }}"
-        group: "{{ jenkins_agent_user }}"
-        mode: '0755'
+              [Install]
+              WantedBy=multi-user.target
+            dest: /etc/systemd/system/jenkins-agent.service
 
-    - name: Créer le service systemd pour l'agent Jenkins
-      copy:
-        dest: /etc/systemd/system/jenkins-agent.service
-        owner: root
-        group: root
-        mode: '0644'
-        content: |
-          [Unit]
-          Description=Jenkins Agent
-          After=network.target
-
-          [Service]
-          Type=simple
-          User=jenkins
-          WorkingDirectory={{ jenkins_agent_home }}/agent
-          ExecStart={{ jenkins_agent_home }}/start-agent.sh
-          Restart=always
-
-          [Install]
-          WantedBy=multi-user.target
-
-    - name: Recharger systemd
-      systemd:
-        daemon_reload: yes
-
-    - name: Activer et démarrer le service jenkins-agent
-      systemd:
-        name: jenkins-agent
-        enabled: yes
-        state: started
-
-    - name: Vérifier le statut de l'agent sur Jenkins
-      uri:
-        url: "{{ jenkins_master_url }}/computer/jenkins-agent/api/json"
-        method: GET
-        user: admin
-        password: "{{ lookup('env', 'JENKINS_ADMIN_PASSWORD') }}"
-        force_basic_auth: yes
-        return_content: yes
-      register: agent_status
-      retries: 3
-      delay: 5
-
-    - name: Afficher le statut de l'agent
-      debug:
-        msg: "Agent jenkins-agent - Online: {{ agent_status.json.offline | ternary('Non', 'Oui') }}"
-      when: agent_status.json is defined
-      
-    # Installation de Docker moderne - version corrigée
-    - name: Supprimer TOUS les anciens dépôts et clés Docker
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/apt/sources.list.d/docker.list
-        - /etc/apt/sources.list.d/docker-ce.list
-        - /etc/apt/sources.list.d/docker.sources
-        - /etc/apt/sources.list.d/docker-official.list
-        - /etc/apt/trusted.gpg.d/docker.gpg
-        - /etc/apt/trusted.gpg.d/docker.asc
-        - /etc/apt/keyrings/docker.gpg
-
-    - name: Supprimer toutes les références Docker du sources.list principal
-      lineinfile:
-        path: /etc/apt/sources.list
-        regexp: '.*docker.*'
-        state: absent
-      ignore_errors: yes
-
-    - name: Nettoyer le cache APT après suppression des dépôts
-      apt:
-        update_cache: yes
-      ignore_errors: yes
-
-    - name: Supprimer les packages Docker conflictuels
-      apt:
-        name:
-          - docker.io
-          - docker-doc
-          - docker-compose
-          - podman-docker
-          - containerd
-          - runc
-        state: absent
-      ignore_errors: yes
-
-    - name: Créer le répertoire pour les clés Docker
-      file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: '0755'
-
-    - name: Télécharger et installer la clé GPG Docker (propre)
-      shell: |
-        rm -f /etc/apt/keyrings/docker.gpg
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        chmod a+r /etc/apt/keyrings/docker.gpg
-      args:
-        creates: /etc/apt/keyrings/docker.gpg
-
-    - name: Ajouter le dépôt Docker (nouveau fichier propre)
-      copy:
-        dest: /etc/apt/sources.list.d/docker-official.list
-        content: |
-          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-        mode: '0644'
-        backup: yes
-
-    - name: Mettre à jour le cache APT après ajout du dépôt Docker
-      apt:
-        update_cache: yes
-
-    - name: Installer Docker
+    # Docker (même méthode que master)
+    - name: Install Docker
       apt:
         name:
           - docker-ce
@@ -343,198 +119,25 @@
           - containerd.io
           - docker-buildx-plugin
           - docker-compose-plugin
-        state: present
-
-    - name: Ajouter l'utilisateur jenkins au groupe docker
-      user:
-        name: "{{ jenkins_agent_user }}"
-        groups: docker
-        append: yes
-
-    - name: Démarrer et activer Docker
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
-        
-    # Installation de Docker Compose
-    - name: Télécharger Docker Compose
-      get_url:
-        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
-
-    # Installation de Terraform
-    - name: Télécharger Terraform
-      get_url:
-        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
-        dest: /tmp/terraform.zip
-        mode: '0644'
-        
-    - name: Installer Terraform
-      unarchive:
-        src: /tmp/terraform.zip
-        dest: /usr/local/bin
-        remote_src: yes
-        mode: '0755'
-        creates: /usr/local/bin/terraform
-        
-    # Installation de kubectl
-    - name: Télécharger kubectl
-      get_url:
-        url: "https://dl.k8s.io/release/v{{ kubectl_version }}/bin/linux/amd64/kubectl"
-        dest: /usr/local/bin/kubectl
-        mode: '0755'
-        
-    # Installation de Trivy - version corrigée
-    - name: Supprimer l'ancien dépôt Trivy s'il existe
-      file:
-        path: /etc/apt/sources.list.d/trivy.list
-        state: absent
-
-    - name: Créer le répertoire pour les clés Trivy
-      file:
-        path: /usr/share/keyrings
-        state: directory
-        mode: '0755'
-
-    - name: Télécharger et installer la clé GPG Trivy (propre)
-      shell: |
-        curl -sfL https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg
-        chmod a+r /usr/share/keyrings/trivy.gpg
-      args:
-        creates: /usr/share/keyrings/trivy.gpg
-
-    - name: Ajouter le dépôt Trivy (nouveau fichier)
-      shell: |
-        echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb {{ ansible_distribution_release }} main" > /etc/apt/sources.list.d/trivy-official.list
-      args:
-        creates: /etc/apt/sources.list.d/trivy-official.list
-
-    - name: Mettre à jour le cache APT après ajout du dépôt Trivy
-      apt:
         update_cache: yes
 
-    - name: Installer Trivy
-      apt:
-        name: trivy
-        state: present
-        
-    # Installation de SonarScanner
-    - name: Télécharger SonarScanner
-      get_url:
-        url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
-        dest: /tmp/sonar-scanner.zip
-        mode: '0644'
-        
-    - name: Supprimer le répertoire sonar-scanner existant s'il existe
-      file:
-        path: /opt/sonar-scanner
-        state: absent
-        
-    - name: Extraire SonarScanner
-      unarchive:
-        src: /tmp/sonar-scanner.zip
-        dest: /opt
-        remote_src: yes
-        creates: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
-        
-    - name: Créer un lien symbolique pour SonarScanner
-      file:
-        src: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
-        dest: /opt/sonar-scanner
-        state: link
-        force: yes
+    - name: Setup Docker for Jenkins
+      block:
+        - name: Start Docker
+          systemd:
+            name: docker
+            enabled: yes
+            state: started
 
-    - name: Ajouter SonarScanner au PATH
-      copy:
-        dest: /etc/profile.d/sonar-scanner.sh
-        content: |
-          export PATH=$PATH:/opt/sonar-scanner/bin
-        mode: '0644'
-        
-    # Installation d'AWS CLI
-    - name: Télécharger AWS CLI
-      get_url:
-        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
-        dest: /tmp/awscliv2.zip
-        mode: '0644'
-        
-    - name: Extraire AWS CLI
-      unarchive:
-        src: /tmp/awscliv2.zip
-        dest: /tmp
-        remote_src: yes
-        creates: /tmp/aws
-        
-    - name: Installer AWS CLI
-      command: /tmp/aws/install
-      args:
-        creates: /usr/local/bin/aws
-        
-    # Nettoyer les fichiers temporaires
-    - name: Supprimer les fichiers temporaires
-      file:
-        path: "{{ item }}"
-        state: absent
-      with_items:
-        - /tmp/terraform.zip
-        - /tmp/sonar-scanner.zip
-        - /tmp/awscliv2.zip
-        
-    # Configuration de l'environnement pour Jenkins
-    - name: Créer le fichier .bashrc pour l'utilisateur jenkins
-      copy:
-        dest: "{{ jenkins_agent_home }}/.bashrc"
-        owner: "{{ jenkins_agent_user }}"
-        group: "{{ jenkins_agent_user }}"
-        mode: '0644'
-        content: |
-          # Fichier .bashrc pour l'agent Jenkins
-          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
-          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
-          export SONAR_SCANNER_HOME=/opt/sonar-scanner
-          export NODE_OPTIONS="--max-old-space-size=4096"
-          
-          # Aliases utiles
-          alias ll='ls -alF'
-          alias la='ls -A'
-          alias l='ls -CF'
-          alias docker-clean='docker system prune -f'
-          alias k='kubectl'
+        - name: Add jenkins to docker group
+          user:
+            name: "{{ jenkins_agent_user }}"
+            groups: docker
+            append: yes
 
-    - name: Créer le fichier profile pour définir les variables globalement
-      copy:
-        dest: /etc/profile.d/jenkins-env.sh
-        mode: '0644'
-        content: |
-          # Variables d'environnement pour Jenkins
-          export PATH=$PATH:/usr/local/bin:/opt/sonar-scanner/bin
-          export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:/bin/java::")
-          export SONAR_SCANNER_HOME=/opt/sonar-scanner
-          export NODE_OPTIONS="--max-old-space-size=4096"
-
-    # Test des installations
-    - name: Tester les installations critiques
-      command: "{{ item }}"
-      loop:
-        - node --version
-        - npm --version
-        - docker --version
-        - java -version
-        - terraform version
-        - kubectl version --client
-        - aws --version
-      register: tools_check
-      changed_when: false
-      failed_when: false
-
-    - name: Afficher les résultats des tests d'installation
-      debug:
-        msg: "{{ item.cmd[0] }}: {{ 'OK' if item.rc == 0 else 'FAILED' }} - {{ item.stdout if item.rc == 0 else item.stderr }}"
-      loop: "{{ tools_check.results }}"
-
-    - name: Vérifier que tous les outils critiques sont installés
-      fail:
-        msg: "Des outils critiques ne sont pas installés correctement"
-      when: tools_check.results | selectattr('rc', 'ne', 0) | list | length > 0
+        - name: Start Jenkins agent
+          systemd:
+            name: jenkins-agent
+            enabled: yes
+            state: started
+            daemon_reload: yes

@@ -1,50 +1,38 @@
 #!/bin/bash
+set -euo pipefail
 
-# Récupérer les credentials Jenkins et la clé SSH depuis AWS Secrets Manager
+# Script simplifié de déploiement Jenkins Master
+echo "🚀 Déploiement Jenkins Master simplifié..."
+
+# Récupérer les credentials depuis AWS Secrets Manager
 export JENKINS_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_password')
 export JENKINS_ADMIN_USERNAME=$(aws secretsmanager get-secret-value --secret-id projet-c-devops-jenkins-credentials --query SecretString --output text --region ca-central-1 | jq -r '.admin_username')
 SSH_PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id SSH_PRIVATE_KEY --query SecretString --output text --region ca-central-1)
 
-# Récupérer l'adresse IP de SonarQube 
+# Récupérer l'IP SonarQube
 export SONARQUBE_IP=$(aws ec2 describe-instances \
   --filters "Name=tag:Name,Values=sonarqube" "Name=instance-state-name,Values=running" \
   --query "Reservations[].Instances[].PublicIpAddress" \
   --output text \
   --region ca-central-1)
 
-# Initaliser l'agent ssh
+# Créer la clé SSH temporaire
+SSH_KEY_FILE=$(mktemp)
+echo "$SSH_PRIVATE_KEY" > "$SSH_KEY_FILE"
+chmod 600 "$SSH_KEY_FILE"
+
 cd $GITHUB_WORKSPACE/infra/ansible
-eval "$(ssh-agent -s)"
-ssh-add <(echo "$SSH_PRIVATE_KEY")
 
-# Créer le fichier d'inventaire avec les IPs réelles
-cat > inventory_jenkins.yml << EOF
-all:
-  vars:
-    ansible_user: ubuntu
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-
-  children:
-    jenkins:
-      hosts:
-        jenkins-master:
-          ansible_host: "${JENKINS_IP}"
+# Créer l'inventaire simple
+cat > inventory.ini << EOF
+[jenkins]
+jenkins-master ansible_host=${JENKINS_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY_FILE}
 EOF
 
-# Installer les rôles Ansible
-ansible-galaxy install geerlingguy.java --force
-ansible-galaxy install geerlingguy.jenkins --force
-
-# Créer le répertoire vars s'il n'existe pas
-mkdir -p vars
-
-# Vérifier la syntaxe du playbook
-ansible-playbook -i inventory_jenkins.yml jenkins-master-playbook.yml --syntax-check
-
 # Déployer Jenkins master
-ansible-playbook -i inventory_jenkins.yml jenkins-master-playbook.yml -v
+ansible-playbook -i inventory.ini jenkins-master-playbook.yml
 
-# Nettoyer les fichiers temporaires
-rm -f inventory_jenkins.yml
+# Nettoyer
+rm -f inventory.ini "$SSH_KEY_FILE"
 
-echo "Déploiement Jenkins terminé"
+echo "✅ Déploiement Jenkins terminé"
