@@ -1,11 +1,12 @@
 # Génération automatique des mots de passe
+
 resource "random_password" "jenkins_admin" {
   length  = 16
   special = true
 }
 
 resource "random_password" "sonarqube_admin" {
-  length           = 16
+  length           = 12
   special          = true
   min_upper        = 1
   min_lower        = 1
