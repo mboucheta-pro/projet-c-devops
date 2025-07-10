@@ -7,6 +7,7 @@
     jenkins_agent_home: /home/jenkins
   
   tasks:
+
     # Fix Docker APT (cohérent avec master)
     - name: Fix Docker APT
       script: ../../scripts/fix_docker_apt.sh
@@ -25,6 +26,40 @@
     - name: Set timezone
       timezone:
         name: Europe/Paris
+
+    # Helm & Kubernetes CLI
+    - name: Install Helm
+      shell: |
+        curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 /tmp/get_helm.sh
+        /tmp/get_helm.sh
+      args:
+        creates: /usr/local/bin/helm
+      tags: [helm, k8s]
+
+    - name: Install kubectl
+      shell: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        rm -f kubectl
+      args:
+        creates: /usr/local/bin/kubectl
+      tags: [helm, k8s]
+
+    - name: Install yq (YAML processor)
+      shell: |
+        wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        chmod +x /usr/local/bin/yq
+      args:
+        creates: /usr/local/bin/yq
+      tags: [helm, k8s]
+
+    - name: Install jq (JSON processor)
+      apt:
+        name: jq
+        state: present
+        update_cache: yes
+      tags: [helm, k8s]
 
     # Node.js (même méthode que master)
     - name: Setup Node.js
