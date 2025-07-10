@@ -70,8 +70,24 @@
           retries: 30
           delay: 10
 
-    - name: Display SonarQube info
+    - name: Change SonarQube admin password (si différent de admin)
+      uri:
+        url: "http://localhost:9000/api/users/change_password"
+        method: POST
+        user: "admin"
+        password: "admin"
+        body_format: form-urlencoded
+        body:
+          login: "admin"
+          previousPassword: "admin"
+          password: "{{ sonarqube_admin_password | default('admin') }}"
+        status_code: 204
+      register: change_admin_pw
+      failed_when: change_admin_pw.status not in [204, 400]
+      ignore_errors: true
+
+    - name: Affiche les infos SonarQube
       debug:
-        msg: 
+        msg:
           - "✅ SonarQube ready at http://{{ inventory_hostname }}:9000"
-          - "🔑 Default credentials: admin/admin"
+          - "🔑 Credentials admin : {{ sonarqube_admin_username | default('admin') }}/{{ sonarqube_admin_password | default('admin') }}"
