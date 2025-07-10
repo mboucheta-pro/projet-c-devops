@@ -83,8 +83,22 @@
           password: "{{ sonarqube_admin_password | default('admin') }}"
         status_code: 204
       register: change_admin_pw
-      failed_when: change_admin_pw.status not in [204, 400]
+      failed_when: change_admin_pw.status not in [204, 400, 401]
       ignore_errors: true
+
+    - name: Debug SonarQube password change result
+      debug:
+        msg: |
+          {% if change_admin_pw.status == 204 %}
+            ✅ SonarQube admin password changed successfully.
+          {% elif change_admin_pw.status == 401 %}
+            ⚠️  SonarQube admin password was already changed or is not 'admin'. Skipping password change.
+          {% elif change_admin_pw.status == 400 %}
+            ⚠️  SonarQube password change request was invalid (possibly already set to this password).
+          {% else %}
+            ❌ Unexpected status: {{ change_admin_pw.status }}
+          {% endif %}
+      when: change_admin_pw is defined
 
     - name: Affiche les infos SonarQube
       debug:
