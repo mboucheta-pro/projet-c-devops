@@ -30,3 +30,5 @@ rm -f inventory.ini "$SSH_KEY_FILE"
 
 echo "✅ Déploiement SonarQube terminé"
 echo "📍 SonarQube: http://$SONARQUBE_IP:9000 (admin/admin)"
+echo "Pensez à changer le mot de passe admin dans SonarQube !"
+echo "Pour plus de sécurité, utilisez AWS Secrets Manager pour stocker les credentials."
