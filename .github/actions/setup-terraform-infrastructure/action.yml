@@ -35,7 +35,7 @@ runs:
             terraform plan -out="tfplan"
             terraform apply -auto-approve tfplan
             terraform output -json > "$GITHUB_WORKSPACE/terraform-outputs.json"
-            echo "terraform_output=$(cat $GITHUB_WORKSPACE/terraform-outputs.json)" >> $GITHUB_OUTPUT
+            echo "terraform_output=$(jq -c . $GITHUB_WORKSPACE/terraform-outputs.json)" >> $GITHUB_OUTPUT
             echo "✅ Infrastructure créée avec succès"
             ;;
           "destroy")
