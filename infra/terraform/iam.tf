@@ -27,6 +27,7 @@ resource "aws_iam_role_policy" "cicd_instances" {
         Effect = "Allow"
         Action = [
           "eks:DescribeCluster",
+          "eks:AccessKubernetesApi",
           "eks:ListClusters",
           "eks:CreateCluster",
           "eks:TagResource",
